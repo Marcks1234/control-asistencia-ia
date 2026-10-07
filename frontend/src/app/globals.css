@@ -4,12 +4,22 @@
   --background: #ffffff;
   --foreground: #171717;
 }
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
+  --color-primary: #273656;
+  --color-secundary: #788DC6;
+
+}
+
+@utility btn-home-page-primary{
+  @apply bg-primary text-white px-7 py-3 rounded-md font-medium shadow-sm hover:opacity-90 transition active:scale-98;
+}
+
+@utility btn-home-page-secundary{
+  @apply bg-secundary text-white px-7 py-3 rounded-md font-medium shadow-sm hover:opacity-90 transition active:scale-98;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,5 +32,6 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
+

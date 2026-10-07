@@ -1,0 +1,9 @@
+# Dependencias pesadas (Node)
+node_modules/
+
+# Archivos de configuración secreta locales
+.env
+
+# Archivos basura del sistema operativo
+.DS_Store
+Thumbs.db
