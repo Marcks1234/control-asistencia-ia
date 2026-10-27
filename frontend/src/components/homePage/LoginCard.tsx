@@ -1,4 +1,15 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+
 export default function LoginCard() {
+  const router = useRouter();
+
+  const manejarLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    router.push("/entradas-salidas");
+  };
+
   return (
     // Agregamos max-w-4xl, fondo blanco, bordes redondeados grandes y sombra para crear el efecto de tarjeta flotante
     <section className="flex flex-col md:flex-row mt-30 justify-center max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
@@ -11,12 +22,13 @@ export default function LoginCard() {
         </h2>
         <p className="text-sm text-gray-400 mb-6">Inicia sesión para gestionar el acceso de tus sedes.</p>
         
-        <form action="" method="post" className="space-y-4">
+        <form onSubmit={manejarLogin} className="space-y-4">
           <div>
             <label className="text-xs font-bold text-gray-500">Correo Electrónico</label>
             <div className="py-2">
               <input 
                 type="email" 
+                defaultValue="sarah.miller@asistencia-ia.pe"
                 placeholder="correo@gmail.com" 
                 title="Correo electronico"
                 className="w-full pl-2 pr-4 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-800 focus:outline-hidden focus:border-secundary transition shadow-xs"
@@ -32,6 +44,7 @@ export default function LoginCard() {
             <div className="py-2">
               <input 
                 type="password" 
+                defaultValue="123456789"
                 placeholder="••••••••••••" 
                 className="w-full pl-2 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 focus:outline-hidden focus:border-secundary transition shadow-xs"
               />
@@ -39,7 +52,10 @@ export default function LoginCard() {
           </div>
 
           {/* Botón Iniciar Sesión */}
-          <button className="w-full bg-primary text-white py-2.5 rounded-md font-bold text-sm mt-1 hover:opacity-95 transition shadow-sm">
+          <button
+            type="submit"
+            className="w-full bg-primary text-white py-2.5 rounded-md font-bold text-sm mt-1 hover:opacity-95 transition shadow-sm cursor-pointer"
+          >
             Iniciar Sesión
           </button>
         </form>
@@ -51,10 +67,18 @@ export default function LoginCard() {
 
         {/* Botones de Redes Sociales*/}
         <div className="grid grid-cols-2 gap-3">
-          <button className="flex items-center justify-center gap-2 bg-secundary text-white py-2 px-4 rounded-md text-xs font-bold shadow-xs hover:opacity-90 transition">
+          <button
+            type="button"
+            onClick={() => router.push("/entradas-salidas")}
+            className="flex items-center justify-center gap-2 bg-secundary text-white py-2 px-4 rounded-md text-xs font-bold shadow-xs hover:opacity-90 transition cursor-pointer"
+          >
             Google
           </button>
-          <button className="flex items-center justify-center gap-2 bg-primary text-white py-2 px-4 rounded-md text-xs font-bold shadow-xs hover:opacity-90 transition">
+          <button
+            type="button"
+            onClick={() => router.push("/entradas-salidas")}
+            className="flex items-center justify-center gap-2 bg-primary text-white py-2 px-4 rounded-md text-xs font-bold shadow-xs hover:opacity-90 transition cursor-pointer"
+          >
             Microsoft
           </button>
         </div>

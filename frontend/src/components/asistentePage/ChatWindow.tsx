@@ -168,9 +168,9 @@ export default function ChatWindow({
   ];
 
   return (
-    <div className="flex-1 flex flex-col px-8 py-6 max-w-6xl w-full mx-auto">
+    <div className="flex-1 flex flex-col w-full">
       {/* Encabezado de la vista */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
             Asistente Inteligente IA

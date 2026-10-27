@@ -1,4 +1,3 @@
-
 import Link from "next/link"
 import Image from "next/image"
 
@@ -19,11 +18,10 @@ export default function NavBar() {
 
             {/*botones iniciar*/}
             <div className="flex items-center gap-4">
-                <button className="text-gray-600 hover:text-gray-900 transition">Iniciar sesión</button>
-                <button className="btn-home-page-secundary">Empezar Gratis</button>
+                <Link href="/entradas-salidas" className="text-gray-600 hover:text-gray-900 transition">Iniciar sesión</Link>
+                <Link href="/asistente-ia" className="btn-home-page-secundary">Empezar Gratis</Link>
             </div>
         </header>
 
     )
 }
-
