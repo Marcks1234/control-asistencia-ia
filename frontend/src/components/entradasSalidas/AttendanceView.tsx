@@ -1,25 +1,56 @@
 "use client";
 
-import React, { useState } from "react";
-import TopBar from "./TopBar";
+import React, { useState, useEffect } from "react";
 import PageHeader from "./PageHeader";
 import ManualRegistrationCard from "./ManualRegistrationCard";
 import DailyAttendanceCard from "./DailyAttendanceCard";
-import { INITIAL_ATTENDANCE_RECORDS } from "@/services/mockAttendanceData";
+import { INITIAL_ATTENDANCE_RECORDS, INITIAL_EMPLOYEES } from "@/services/mockAttendanceData";
 import { AttendanceRecord, Employee } from "@/types/attendance";
+import {
+  fetchAsistencias,
+  registrarEntradaEmpleado,
+  registrarSalidaEmpleado,
+} from "@/services/asistenciaService";
 
-export default function AttendanceView() {
-  const [records, setRecords] = useState<AttendanceRecord[]>(
-    INITIAL_ATTENDANCE_RECORDS
-  );
-  const [globalSearch, setGlobalSearch] = useState<string>("");
+interface AttendanceViewProps {
+  globalSearch?: string;
+}
 
-  const handleRegisterCheckIn = (employee: Employee) => {
+export default function AttendanceView({ globalSearch = "" }: AttendanceViewProps) {
+  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
+  const [records, setRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE_RECORDS);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Cargar datos reales desde Supabase al iniciar
+  useEffect(() => {
+    let cancelado = false;
+    async function cargarDatos() {
+      try {
+        const data = await fetchAsistencias();
+        if (!cancelado) {
+          if (data.employees.length > 0) setEmployees(data.employees);
+          if (data.records.length > 0) setRecords(data.records);
+        }
+      } catch (err) {
+        console.warn("[AttendanceView] Error cargando asistencias de Supabase:", err);
+      } finally {
+        if (!cancelado) setLoading(false);
+      }
+    }
+
+    cargarDatos();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  const handleRegisterCheckIn = async (employee: Employee) => {
     const now = new Date();
     const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
       now.getMinutes()
     ).padStart(2, "0")}`;
 
+    // 1. Actualización optimista inmediata en la UI
     setRecords((prev) => {
       const existingIndex = prev.findIndex((r) => r.employeeId === employee.id);
       if (existingIndex >= 0) {
@@ -29,6 +60,8 @@ export default function AttendanceView() {
           status: "presente",
           checkIn: timeFormatted,
           checkOut: "En curso",
+          note: null,
+          noteType: undefined,
         };
         return updated;
       } else {
@@ -48,14 +81,27 @@ export default function AttendanceView() {
         return [newRecord, ...prev];
       }
     });
+
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === employee.id ? { ...e, status: "presente" } : e))
+    );
+
+    // 2. Persistencia en la base de datos Supabase
+    await registrarEntradaEmpleado(employee.id, `${timeFormatted}:00`);
+
+    // 3. Re-sincronizar con Supabase para confirmar
+    const fresca = await fetchAsistencias();
+    if (fresca.records.length > 0) setRecords(fresca.records);
+    if (fresca.employees.length > 0) setEmployees(fresca.employees);
   };
 
-  const handleRegisterCheckOut = (employee: Employee) => {
+  const handleRegisterCheckOut = async (employee: Employee) => {
     const now = new Date();
     const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
       now.getMinutes()
     ).padStart(2, "0")}`;
 
+    // 1. Actualización optimista inmediata
     setRecords((prev) =>
       prev.map((rec) => {
         if (rec.employeeId === employee.id) {
@@ -68,17 +114,18 @@ export default function AttendanceView() {
         return rec;
       })
     );
+
+    // 2. Persistencia en la base de datos Supabase
+    await registrarSalidaEmpleado(employee.id, `${timeFormatted}:00`);
+
+    // 3. Re-sincronizar con Supabase para confirmar
+    const fresca = await fetchAsistencias();
+    if (fresca.records.length > 0) setRecords(fresca.records);
+    if (fresca.employees.length > 0) setEmployees(fresca.employees);
   };
 
   return (
-    <div className="w-full flex flex-col space-y-4">
-      {/* Top Bar with Date, Search and AI Button */}
-      <TopBar
-        searchQuery={globalSearch}
-        onSearchChange={setGlobalSearch}
-        onAiAssistantClick={() => alert("Asistente AI activado")}
-      />
-
+    <div className="w-full flex flex-col space-y-6">
       {/* Page Title & Shift Badge */}
       <PageHeader />
 
@@ -87,6 +134,8 @@ export default function AttendanceView() {
         {/* Left Column: Manual Registration Card (5 of 12 cols on desktop) */}
         <div className="lg:col-span-5">
           <ManualRegistrationCard
+            employees={employees}
+            loading={loading}
             onRegisterCheckIn={handleRegisterCheckIn}
             onRegisterCheckOut={handleRegisterCheckOut}
           />
@@ -94,10 +143,13 @@ export default function AttendanceView() {
 
         {/* Right Column: Daily Attendance Table Card (7 of 12 cols on desktop) */}
         <div className="lg:col-span-7">
-          <DailyAttendanceCard records={records} />
+          <DailyAttendanceCard
+            records={records}
+            externalSearch={globalSearch}
+            loading={loading}
+          />
         </div>
       </div>
     </div>
   );
 }
-
