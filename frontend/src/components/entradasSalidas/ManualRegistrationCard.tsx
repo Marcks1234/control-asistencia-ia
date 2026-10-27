@@ -7,8 +7,12 @@ import { INITIAL_EMPLOYEES } from "@/services/mockAttendanceData";
 interface ManualRegistrationCardProps {
   employees?: Employee[];
   loading?: boolean;
-  onRegisterCheckIn?: (employee: Employee) => Promise<void> | void;
-  onRegisterCheckOut?: (employee: Employee) => Promise<void> | void;
+  onRegisterCheckIn?: (
+    employee: Employee
+  ) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
+  onRegisterCheckOut?: (
+    employee: Employee
+  ) => Promise<{ ok: boolean; mensaje?: string; error?: string }>;
 }
 
 function obtenerFechaActualFormateada(): string {
@@ -47,14 +51,19 @@ export default function ManualRegistrationCard({
 }: ManualRegistrationCardProps) {
   const [selectedEmpId, setSelectedEmpId] = useState<string>("");
   const [feedbackMessage, setFeedbackMessage] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [guardando, setGuardando] = useState<boolean>(false);
   const [timeString, setTimeString] = useState<string>("08:00:00");
   const [fechaHoy, setFechaHoy] = useState<string>(obtenerFechaActualFormateada);
 
-  // Seleccionar automáticamente el primer empleado si no hay ninguno seleccionado
   useEffect(() => {
-    if (employees.length > 0 && (!selectedEmpId || !employees.some((e) => e.id === selectedEmpId))) {
-      setSelectedEmpId(employees[0].id);
+    if (
+      employees.length > 0 &&
+      (!selectedEmpId || !employees.some((e) => e.id === selectedEmpId))
+    ) {
+      // Priorizar seleccionar primero a quien aún no tiene entrada hoy (ej. Sofía Vega) para facilitar la prueba
+      const sinEntrada = employees.find((e) => !e.checkIn);
+      setSelectedEmpId(sinEntrada ? sinEntrada.id : employees[0].id);
     }
   }, [employees, selectedEmpId]);
 
@@ -73,7 +82,8 @@ export default function ManualRegistrationCard({
   }, []);
 
   const selectedEmployee =
-    employees.find((e) => e.id === selectedEmpId) || employees[0] || {
+    employees.find((e) => e.id === selectedEmpId) ||
+    employees[0] || {
       id: "none",
       name: "Cargando colaboradores...",
       department: "Operaciones",
@@ -81,23 +91,40 @@ export default function ManualRegistrationCard({
       startTime: "08:00",
       shiftSchedule: "08:00 - 17:00",
       status: "esperado" as const,
+      checkIn: null,
+      checkOut: null,
     };
+
+  const yaMarcoEntrada = Boolean(selectedEmployee.checkIn);
+  const yaMarcoSalida = Boolean(
+    selectedEmployee.checkOut && selectedEmployee.checkOut !== "En curso"
+  );
 
   const handleCheckIn = async () => {
     if (!selectedEmployee || guardando || selectedEmployee.id === "none") return;
-    setGuardando(true);
-    const now = new Date();
-    const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`;
+    setFeedbackMessage("");
+    setErrorMessage("");
 
-    try {
-      await onRegisterCheckIn?.(selectedEmployee);
-      setFeedbackMessage(
-        `Entrada de ${selectedEmployee.name} registrada en Supabase (${timeFormatted})`
+    if (yaMarcoEntrada) {
+      setErrorMessage(
+        `${selectedEmployee.name} ya tiene entrada registrada hoy a las ${selectedEmployee.checkIn}.`
       );
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const res = await onRegisterCheckIn?.(selectedEmployee);
+      if (res && !res.ok) {
+        setErrorMessage(res.error || "No se pudo registrar la entrada.");
+      } else {
+        setFeedbackMessage(
+          res?.mensaje ||
+            `Entrada de ${selectedEmployee.name} registrada hoy correctamente.`
+        );
+      }
     } catch {
-      setFeedbackMessage(`Error al registrar entrada en la base de datos.`);
+      setErrorMessage("Error al registrar entrada en la base de datos.");
     } finally {
       setGuardando(false);
     }
@@ -105,19 +132,36 @@ export default function ManualRegistrationCard({
 
   const handleCheckOut = async () => {
     if (!selectedEmployee || guardando || selectedEmployee.id === "none") return;
-    setGuardando(true);
-    const now = new Date();
-    const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`;
+    setFeedbackMessage("");
+    setErrorMessage("");
 
-    try {
-      await onRegisterCheckOut?.(selectedEmployee);
-      setFeedbackMessage(
-        `Salida de ${selectedEmployee.name} registrada en Supabase (${timeFormatted})`
+    if (!yaMarcoEntrada) {
+      setErrorMessage(
+        `No se puede registrar salida: ${selectedEmployee.name} aún no ha registrado su entrada hoy.`
       );
+      return;
+    }
+
+    if (yaMarcoSalida) {
+      setErrorMessage(
+        `${selectedEmployee.name} ya cerró su jornada hoy a las ${selectedEmployee.checkOut}.`
+      );
+      return;
+    }
+
+    setGuardando(true);
+    try {
+      const res = await onRegisterCheckOut?.(selectedEmployee);
+      if (res && !res.ok) {
+        setErrorMessage(res.error || "No se pudo registrar la salida.");
+      } else {
+        setFeedbackMessage(
+          res?.mensaje ||
+            `Salida de ${selectedEmployee.name} registrada hoy correctamente.`
+        );
+      }
     } catch {
-      setFeedbackMessage(`Error al registrar salida en la base de datos.`);
+      setErrorMessage("Error al registrar salida en la base de datos.");
     } finally {
       setGuardando(false);
     }
@@ -125,7 +169,7 @@ export default function ManualRegistrationCard({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs flex flex-col justify-between space-y-6">
-      {/* 1. Digital Clock Box */}
+      {/* 1. Reloj Digital en Tiempo Real (Solo Día Actual) */}
       <div className="border border-slate-100 rounded-2xl py-6 px-4 text-center bg-[#FBFBFC]">
         <div className="flex items-center justify-center gap-2">
           <span
@@ -136,17 +180,20 @@ export default function ManualRegistrationCard({
           </span>
         </div>
         <p
-          className="text-xs text-gray-400 font-medium mt-1"
+          className="text-xs text-gray-500 font-semibold mt-1"
           suppressHydrationWarning
         >
           {fechaHoy}
         </p>
+        <span className="inline-block mt-2 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full">
+          Control en tiempo real · Solo jornada de hoy
+        </span>
       </div>
 
-      {/* 2. Employee Selector */}
+      {/* 2. Selector de Colaborador */}
       <div>
         <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-          Seleccionar Empleado (Base de Datos Supabase) *
+          Seleccionar Empleado (Jornada Actual) *
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
@@ -163,15 +210,26 @@ export default function ManualRegistrationCard({
           </div>
           <select
             value={selectedEmpId}
-            onChange={(e) => setSelectedEmpId(e.target.value)}
+            onChange={(e) => {
+              setSelectedEmpId(e.target.value);
+              setFeedbackMessage("");
+              setErrorMessage("");
+            }}
             disabled={loading || employees.length === 0}
             className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200/90 rounded-xl text-xs font-semibold text-gray-800 appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-xs transition disabled:opacity-60"
           >
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.name} — {emp.department} ({emp.shift})
-              </option>
-            ))}
+            {employees.map((emp) => {
+              const estadoTexto = !emp.checkIn
+                ? "Sin entrada hoy"
+                : emp.checkOut === "En curso"
+                ? `En turno (${emp.checkIn})`
+                : `Jornada cerrada (${emp.checkIn} - ${emp.checkOut})`;
+              return (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} — {estadoTexto}
+                </option>
+              );
+            })}
           </select>
           <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-gray-400">
             <svg
@@ -187,7 +245,7 @@ export default function ManualRegistrationCard({
         </div>
       </div>
 
-      {/* 3. Selected Employee Profile Preview Box */}
+      {/* 3. Resumen del Colaborador Seleccionado Hoy */}
       <div className="bg-[#F8FAFC] border border-slate-100 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -208,7 +266,7 @@ export default function ManualRegistrationCard({
             </div>
           </div>
 
-          {/* Status Badge */}
+          {/* Badge de Estado Actual */}
           <div>
             {selectedEmployee.status === "tardanza" && (
               <span className="text-[11px] font-semibold text-[#D97706] bg-[#FEF3C7] border border-[#FDE68A] px-2.5 py-0.5 rounded-full">
@@ -222,7 +280,7 @@ export default function ManualRegistrationCard({
             )}
             {selectedEmployee.status === "ausente" && (
               <span className="text-[11px] font-semibold text-[#DC2626] bg-[#FEE2E2] border border-[#FECACA] px-2.5 py-0.5 rounded-full">
-                Ausente
+                Sin Entrada Hoy
               </span>
             )}
             {selectedEmployee.status === "permiso" && (
@@ -238,14 +296,29 @@ export default function ManualRegistrationCard({
           </div>
         </div>
 
-        {/* Turno and Inicio */}
         <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-gray-500 font-medium">
-          <span>Turno: {selectedEmployee.shiftSchedule || selectedEmployee.shift}</span>
-          <span>Inicio: {selectedEmployee.startTime}</span>
+          <span>
+            Entrada hoy:{" "}
+            <strong className="text-gray-800">
+              {selectedEmployee.checkIn || "Pendiente"}
+            </strong>
+          </span>
+          <span>
+            Salida hoy:{" "}
+            <strong className="text-gray-800">
+              {selectedEmployee.checkOut || "Pendiente"}
+            </strong>
+          </span>
         </div>
       </div>
 
-      {/* 4. Feedback / Status Pill */}
+      {/* 4. Mensajes de Confirmación o Regla de Negocio */}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-red-600 text-xs font-semibold">
+          {errorMessage}
+        </div>
+      )}
+
       {feedbackMessage && (
         <div className="bg-[#ECFDF5] border border-[#A7F3D0] rounded-xl px-4 py-2.5 flex items-center gap-2.5 text-[#059669] text-xs font-semibold">
           <svg
@@ -261,13 +334,18 @@ export default function ManualRegistrationCard({
         </div>
       )}
 
-      {/* 5. Action Buttons */}
+      {/* 5. Botones de Acción con Reglas Lógicas de Negocio */}
       <div className="grid grid-cols-2 gap-3 pt-1">
         <button
           type="button"
           onClick={handleCheckIn}
-          disabled={guardando || loading}
-          className="flex items-center justify-center gap-2 bg-[#1754CF] hover:bg-[#1244A7] disabled:opacity-50 text-white py-3 px-4 rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
+          disabled={guardando || loading || yaMarcoEntrada}
+          title={
+            yaMarcoEntrada
+              ? `Ya registró entrada hoy a las ${selectedEmployee.checkIn}`
+              : "Registrar entrada de hoy"
+          }
+          className="flex items-center justify-center gap-2 bg-[#1754CF] hover:bg-[#1244A7] disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 px-4 rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
         >
           <svg
             className="w-4 h-4"
@@ -280,14 +358,23 @@ export default function ManualRegistrationCard({
             <polyline points="10 17 15 12 10 7" />
             <line x1="15" y1="12" x2="3" y2="12" />
           </svg>
-          <span>{guardando ? "Guardando..." : "Registrar Entrada"}</span>
+          <span>
+            {yaMarcoEntrada ? "Entrada Registrada" : "Registrar Entrada"}
+          </span>
         </button>
 
         <button
           type="button"
           onClick={handleCheckOut}
-          disabled={guardando || loading}
-          className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-800 border border-gray-200/90 py-3 px-4 rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
+          disabled={guardando || loading || !yaMarcoEntrada || yaMarcoSalida}
+          title={
+            !yaMarcoEntrada
+              ? "Primero debe registrar su entrada de hoy"
+              : yaMarcoSalida
+              ? `Ya registró salida hoy a las ${selectedEmployee.checkOut}`
+              : "Registrar salida de hoy"
+          }
+          className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-gray-800 border border-gray-200/90 py-3 px-4 rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
         >
           <svg
             className="w-4 h-4 text-gray-600"
@@ -300,7 +387,9 @@ export default function ManualRegistrationCard({
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          <span>{guardando ? "Guardando..." : "Registrar Salida"}</span>
+          <span>
+            {yaMarcoSalida ? "Salida Registrada" : "Registrar Salida"}
+          </span>
         </button>
       </div>
     </div>

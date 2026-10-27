@@ -5,8 +5,16 @@ const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
-// Caché en memoria para no gastar tokens de OpenAI en preguntas repetidas
 const cacheRespuestas = new Map<string, string>();
+
+function obtenerFechaHoyPeru(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
 
 async function querySupabase(endpoint: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
@@ -31,11 +39,12 @@ export async function POST(req: NextRequest) {
 
     const consulta = String(mensaje).trim();
     const consultaNorm = consulta.toLowerCase();
+    const fechaHoy = obtenerFechaHoyPeru();
 
-    // 1. Obtener datos reales desde Supabase
+    // 1. Obtener datos reales del día actual (fechaHoy) desde Supabase
     const [empleados, asistencias] = await Promise.all([
       querySupabase('empleados?select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual,dni,departamentos(nombre)&activo=eq.true'),
-      querySupabase('asistencias?select=id_empleado,fecha,hora_entrada,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc'),
+      querySupabase(`asistencias?fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,hora_salida,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`),
     ]);
 
     const mapaAsistencia = new Map<string, any>();
@@ -65,6 +74,7 @@ export async function POST(req: NextRequest) {
         codigo_biometrico: emp.codigo_biometrico,
         estado,
         hora_entrada: asist?.hora_entrada ? asist.hora_entrada.slice(0, 5) : 'Sin registro',
+        hora_salida: asist?.hora_salida ? asist.hora_salida.slice(0, 5) : 'En curso',
         minutos_tardanza: asist?.minutos_tardanza || 0,
         punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Torniquete A (Cámara 01)',
         confianza_ia: asist?.confianza_ia ? Number(asist.confianza_ia) : 98.4,
@@ -80,32 +90,31 @@ export async function POST(req: NextRequest) {
     let respuestaTexto = '';
     let metadata: any = {};
 
-    // 2. OPTIMIZACIÓN DE TOKENS:
-    // A) Si es una de las 3 consultas rápidas frecuentes, responder directo con datos reales de BD (0 tokens OpenAI)
+    // Clave de caché incluye el estado actual para nunca devolver conteos desactualizados
+    const claveCache = `${consultaNorm}|${presentes}-${tardanzas}-${ausentes}`;
+
     if (consultaNorm === '¿quién llegó tarde hoy y cuál es el motivo?' || consultaNorm === '¿quién llegó tarde hoy?') {
       if (empleadoTardanza && empleadoTardanza.estado === 'TARDANZA') {
-        respuestaTexto = `Hoy se registró ${tardanzas} tardanza en la base de datos: ${empleadoTardanza.nombre} (${empleadoTardanza.codigo_biometrico}) del área de ${empleadoTardanza.departamento}, quien ingresó a las ${empleadoTardanza.hora_entrada} (+${empleadoTardanza.minutos_tardanza} min). Motivo: ${empleadoTardanza.motivo}.`;
+        respuestaTexto = `Hoy (${fechaHoy}) se registra ${tardanzas} tardanza en la base de datos: ${empleadoTardanza.nombre} (${empleadoTardanza.codigo_biometrico}) del área de ${empleadoTardanza.departamento}, quien ingresó a las ${empleadoTardanza.hora_entrada} (+${empleadoTardanza.minutos_tardanza} min). Motivo: ${empleadoTardanza.motivo}.`;
       } else {
-        respuestaTexto = `Hoy no se registran tardanzas pendientes en la base de datos (${presentes} presentes puntuales y ${ausentes} ausentes).`;
+        respuestaTexto = `Hoy (${fechaHoy}) no se registran tardanzas pendientes en la base de datos (${presentes} presentes y ${ausentes} ausentes).`;
       }
     } else if (consultaNorm === 'ver reporte de operaciones') {
       const opList = datosColaboradores.filter((c) => c.departamento.toLowerCase().includes('operaciones'));
       const detalleOp = opList.map((c) => `${c.nombre}: ${c.estado} (${c.hora_entrada})`).join(' | ');
-      respuestaTexto = `Reporte de Operaciones (${opList.length} colaboradores en BD): ${detalleOp}.`;
+      respuestaTexto = `Reporte de Operaciones de hoy (${opList.length} colaboradores): ${detalleOp}.`;
     } else if (consultaNorm === 'generar resumen del día') {
       const detalleGeneral = datosColaboradores.map((c) => `${c.nombre} (${c.departamento}): ${c.estado}`).join(', ');
-      respuestaTexto = `Resumen real de la base de datos (${datosColaboradores.length} colaboradores): ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes. Detalle: ${detalleGeneral}.`;
-    } else if (cacheRespuestas.has(consultaNorm)) {
-      // B) Si ya preguntaron exactamente lo mismo antes, usar caché en memoria (0 tokens)
-      respuestaTexto = cacheRespuestas.get(consultaNorm)!;
+      respuestaTexto = `Resumen de asistencia de hoy ${fechaHoy} (${datosColaboradores.length} colaboradores): ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes. Detalle: ${detalleGeneral}.`;
+    } else if (cacheRespuestas.has(claveCache)) {
+      respuestaTexto = cacheRespuestas.get(claveCache)!;
     } else if (OPENAI_API_KEY && OPENAI_API_KEY.startsWith('sk-')) {
-      // C) Consulta libre a OpenAI con prompt ultra-compacto (~75% menos tokens)
       try {
         const resumenCompacto = datosColaboradores
-          .map((c) => `${c.nombre}[${c.codigo_biometrico},${c.departamento}]:${c.estado}(${c.hora_entrada},+${c.minutos_tardanza}m,${c.motivo})`)
+          .map((c) => `${c.nombre}[${c.codigo_biometrico},${c.departamento}]:${c.estado}(Entrada:${c.hora_entrada},+${c.minutos_tardanza}m,${c.motivo})`)
           .join('; ');
 
-        const systemPrompt = `Eres AsistenciaAI. Responde en español, breve y directo (máx 3 oraciones) usando solo estos datos reales de BD: Total=${datosColaboradores.length}, Presentes=${presentes}, Tardanzas=${tardanzas}, Ausentes=${ausentes}. Personal: ${resumenCompacto}`;
+        const systemPrompt = `Eres AsistenciaAI. Responde en español, breve y directo (máx 3 oraciones) usando solo estos datos reales de hoy (${fechaHoy}): Total=${datosColaboradores.length}, Presentes=${presentes}, Tardanzas=${tardanzas}, Ausentes=${ausentes}. Personal: ${resumenCompacto}`;
 
         const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -128,7 +137,7 @@ export async function POST(req: NextRequest) {
           const aiJson = await openAiRes.json();
           respuestaTexto = aiJson.choices?.[0]?.message?.content?.trim() || '';
           if (respuestaTexto) {
-            cacheRespuestas.set(consultaNorm, respuestaTexto);
+            cacheRespuestas.set(claveCache, respuestaTexto);
           }
         }
       } catch (err: any) {
@@ -136,12 +145,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Respaldo si OpenAI no estuvo disponible
     if (!respuestaTexto) {
-      respuestaTexto = `Según los registros reales en base de datos, hoy contamos con ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes de un total de ${datosColaboradores.length} colaboradores registrados.`;
+      respuestaTexto = `Según los registros de hoy (${fechaHoy}), contamos con ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes de un total de ${datosColaboradores.length} colaboradores.`;
     }
 
-    // 4. Adjuntar tarjeta interactiva cuando se consulta por tardanzas o por el empleado con tardanza
     if (
       empleadoTardanza &&
       (consultaNorm.includes('tarde') ||
@@ -175,7 +182,6 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // 5. Guardar en Supabase (historial_chat)
     let filaGuardada: any = null;
     try {
       const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/historial_chat`, {

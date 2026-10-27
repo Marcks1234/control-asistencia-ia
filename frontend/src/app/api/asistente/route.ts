@@ -3,6 +3,15 @@ import { NextResponse } from 'next/server';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://txtftxqhnqxpanptiudt.supabase.co';
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
 
+function obtenerFechaHoyPeru(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Lima',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 async function querySupabase(endpoint: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
     headers: {
@@ -18,17 +27,19 @@ async function querySupabase(endpoint: string) {
 
 export async function GET() {
   try {
+    const fechaHoy = obtenerFechaHoyPeru();
+
     const [empleados, asistencias, historial, usuarios] = await Promise.all([
       querySupabase('empleados?select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual&activo=eq.true'),
-      querySupabase('asistencias?select=id_empleado,fecha,hora_entrada,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc'),
+      querySupabase(`asistencias?fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`),
       querySupabase('historial_chat?select=id,mensaje,respuesta,metadata,fecha&order=fecha.asc&limit=50'),
-      querySupabase('usuarios?select=nombre,apellido,cargo&activo=eq.true&limit=1'),
+      querySupabase('usuarios?select=nombre,apellido,rol&activo=eq.true&limit=1'),
     ]);
 
     const listaEmpleados = Array.isArray(empleados) ? empleados : [];
     const listaAsistencias = Array.isArray(asistencias) ? asistencias : [];
 
-    // Tomar la última asistencia registrada por cada empleado activo
+    // Tomar la asistencia del día actual por cada empleado activo
     const mapaAsistencia = new Map<string, any>();
     for (const a of listaAsistencias) {
       if (!mapaAsistencia.has(a.id_empleado)) {
@@ -56,6 +67,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       usuaria,
+      fecha: fechaHoy,
       resumen: {
         presentes,
         tardanzas,
