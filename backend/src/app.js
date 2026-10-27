@@ -3,11 +3,15 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import { supabase, checkSupabaseConnection } from './config/supabase.js';
+import asistenteRoutes from './routes/asistenteRoutes.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Rutas del módulo Asistente Inteligente IA
+app.use('/api/asistente', asistenteRoutes);
 
 app.get('/api/saludo', (req, res) => {
     res.json({ mensaje: "Backend esta bien" });
