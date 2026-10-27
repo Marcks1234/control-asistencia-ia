@@ -4,13 +4,15 @@ import 'dotenv/config';
 
 import { supabase, checkSupabaseConnection } from './config/supabase.js';
 import asistenteRoutes from './routes/asistenteRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Rutas del módulo Asistente Inteligente IA
+// Rutas de la arquitectura en capas
+app.use('/api/auth', authRoutes);
 app.use('/api/asistente', asistenteRoutes);
 
 app.get('/api/saludo', (req, res) => {
