@@ -1,8 +1,5 @@
 import { supabase } from '../config/supabase.js';
 
-const DEFAULT_EMPRESA_ID = '11111111-1111-1111-1111-111111111111';
-const DEFAULT_USUARIO_ID = '22222222-2222-2222-2222-222222222222';
-
 /**
  * Formatea una hora SQL (ej. '08:34:00') a formato legible ('08:34 AM')
  */
@@ -19,7 +16,16 @@ function formatearHora(horaSql) {
 /**
  * Obtiene el contexto real de asistencia, empleados y departamentos desde Supabase
  */
-export async function obtenerContextoAsistencia(idEmpresa = DEFAULT_EMPRESA_ID) {
+export async function obtenerContextoAsistencia(idEmpresa) {
+  if (!idEmpresa) {
+    return {
+      resumen: { presentes: 0, tardanzas: 0, ausentes: 0, total_plantilla: 0, puntualidad_semanal: '100%' },
+      colaboradores: [],
+      tardanzas: [],
+      faltas: [],
+    };
+  }
+
   const { data: empleados } = await supabase
     .from('empleados')
     .select(`
@@ -82,10 +88,10 @@ export async function obtenerContextoAsistencia(idEmpresa = DEFAULT_EMPRESA_ID) 
       codigo_biometrico: emp.codigo_biometrico || 'BIO-0000',
       departamento: depto,
       turno: `${turnoDesc} (${horaTurno})`,
-      estado: asist?.estado || 'PRESENTE',
+      estado: asist?.estado || 'FALTA',
       minutos_tardanza: asist?.minutos_tardanza ?? 0,
       hora_entrada: asist?.hora_entrada ? formatearHora(asist.hora_entrada) : 'Sin marcación',
-      punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Torniquete A (Cámara 01)',
+      punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Torniquete Central',
       confianza_ia: asist?.confianza_ia ? Number(asist.confianza_ia) : 98.5,
       motivo: asist?.observacion || 'Sin observaciones registradas',
     };
@@ -119,34 +125,25 @@ export async function obtenerContextoAsistencia(idEmpresa = DEFAULT_EMPRESA_ID) 
  */
 function generarRespuestaContextual(mensajeUsuario, contexto) {
   const texto = mensajeUsuario.toLowerCase();
-  const empleadoTarde = contexto.tardanzas[0] || contexto.colaboradores.find((c) => c.codigo_biometrico === 'BIO-7721') || {
-    id: '66666666-6666-6666-6666-666666666601',
-    iniciales: 'MG',
-    nombre: 'Miguel García',
-    codigo_biometrico: 'BIO-7721',
-    departamento: 'Operaciones',
-    turno: 'Turno Mañana (08:00 AM)',
-    minutos_tardanza: 34,
-    hora_entrada: '08:34 AM',
-    punto_acceso: 'Torniquete A (Cámara 01)',
-    confianza_ia: 98.4,
-    motivo: 'Congestión vehicular en vía de evitamiento (+34 min tarde)',
-    estado: 'TARDANZA',
-  };
+  const empleadoTarde = contexto.tardanzas[0] || contexto.colaboradores[0];
 
   if (
     texto.includes('tarde') ||
     texto.includes('tardanza') ||
-    texto.includes('miguel') ||
-    texto.includes('motivo') ||
-    texto.includes('7721')
+    texto.includes('motivo')
   ) {
+    if (empleadoTarde && empleadoTarde.estado === 'TARDANZA') {
+      return {
+        respuesta: `Hoy se registró ${contexto.resumen.tardanzas} tardanza en el turno: ${empleadoTarde.nombre} (${empleadoTarde.codigo_biometrico}) ingresó a las ${empleadoTarde.hora_entrada} (+${empleadoTarde.minutos_tardanza} min) por ${empleadoTarde.punto_acceso}. Motivo reportado: ${empleadoTarde.motivo}.`,
+        metadata: {
+          tipo: 'TARJETA_TARDANZA',
+          empleado: empleadoTarde,
+        },
+      };
+    }
     return {
-      respuesta: `Hoy se registró ${contexto.resumen.tardanzas} tardanza en el Turno Mañana. El colaborador ${empleadoTarde.nombre} (${empleadoTarde.codigo_biometrico}) ingresó a las ${empleadoTarde.hora_entrada} (+${empleadoTarde.minutos_tardanza} min) por ${empleadoTarde.punto_acceso}. Motivo reportado: ${empleadoTarde.motivo}.`,
-      metadata: {
-        tipo: 'TARJETA_TARDANZA',
-        empleado: empleadoTarde,
-      },
+      respuesta: `Hoy no se registran tardanzas en tu empresa (${contexto.resumen.presentes} presentes y ${contexto.resumen.ausentes} ausentes).`,
+      metadata: {},
     };
   }
 
@@ -154,11 +151,8 @@ function generarRespuestaContextual(mensajeUsuario, contexto) {
     const deptoOp = contexto.colaboradores.filter((c) => c.departamento.toLowerCase().includes('operaciones'));
     const nombresOp = deptoOp.map((c) => `${c.nombre} (${c.estado})`).join(', ');
     return {
-      respuesta: `En el área de Operaciones tenemos ${deptoOp.length || 2} colaboradores monitoreados en este turno: ${nombresOp || 'Miguel García (TARDANZA), Sofía Vega (FALTA)'}. La puntualidad acumulada del departamento es de 91.8% y la cámara activa principal es el Torniquete A (Cámara 01).`,
-      metadata: {
-        tipo: 'REPORTE_OPERACIONES',
-        empleado: empleadoTarde,
-      },
+      respuesta: `En el área de Operaciones tenemos ${deptoOp.length} colaboradores monitoreados: ${nombresOp || 'Sin registros en el área'}.`,
+      metadata: {},
     };
   }
 
@@ -169,23 +163,23 @@ function generarRespuestaContextual(mensajeUsuario, contexto) {
       .join(', ');
 
     return {
-      respuesta: `Resumen ejecutivo del día: Contamos con ${contexto.resumen.presentes} colaboradores presentes (84.4% de asistencia activa), ${contexto.resumen.tardanzas} tardanza registrada (${empleadoTarde.nombre} con +${empleadoTarde.minutos_tardanza} min) y ${contexto.resumen.ausentes} ausencias. Ingresos puntuales destacados: ${presentesNombres || 'Carlos Ramírez (07:55 AM), Laura Torres (07:58 AM), Patricia López (08:00 AM)'}.`,
+      respuesta: `Resumen ejecutivo del día: Contamos con ${contexto.resumen.presentes} colaboradores presentes (${contexto.resumen.puntualidad_semanal} de puntualidad), ${contexto.resumen.tardanzas} tardanza y ${contexto.resumen.ausentes} ausencias. Ingresos puntuales: ${presentesNombres || 'Ninguno registrado aún'}.`,
       metadata: {},
     };
   }
 
-  if (texto.includes('ausente') || texto.includes('falta') || texto.includes('inasistencia') || texto.includes('sofia') || texto.includes('sofía')) {
+  if (texto.includes('ausente') || texto.includes('falta') || texto.includes('inasistencia')) {
     const ausente = contexto.faltas[0];
     return {
       respuesta: ausente
-        ? `Actualmente figuran ${contexto.resumen.ausentes} colaboradores ausentes. En el registro biométrico destaca ${ausente.nombre} (${ausente.codigo_biometrico} - ${ausente.departamento}) sin marcación de entrada en su turno de las 08:00 AM (${ausente.motivo}).`
-        : `Hoy tenemos ${contexto.resumen.ausentes} colaboradores ausentes entre permisos programados y faltas por justificar.`,
+        ? `Actualmente figuran ${contexto.resumen.ausentes} colaboradores ausentes. En el registro destaca ${ausente.nombre} (${ausente.codigo_biometrico} - ${ausente.departamento}) sin marcación de entrada.`
+        : `Hoy tenemos ${contexto.resumen.ausentes} colaboradores ausentes en el turno actual.`,
       metadata: {},
     };
   }
 
   return {
-    respuesta: `He consultado la base de datos biométrica en tiempo real: hoy registramos ${contexto.resumen.presentes} presentes, ${contexto.resumen.tardanzas} tardanza (${empleadoTarde.nombre} a las ${empleadoTarde.hora_entrada}) y ${contexto.resumen.ausentes} ausentes. ¿Deseas ver el detalle de la tardanza de hoy o el reporte del área de Operaciones?`,
+    respuesta: `He consultado la base de datos de tu empresa en tiempo real: hoy registramos ${contexto.resumen.presentes} presentes, ${contexto.resumen.tardanzas} con tardanza y ${contexto.resumen.ausentes} ausentes de un total de ${contexto.resumen.total_plantilla} colaboradores.`,
     metadata: {},
   };
 }
@@ -196,7 +190,7 @@ const cacheRespuestas = new Map();
  * Llama a la API de OpenAI si existe OPENAI_API_KEY en el entorno;
  * optimiza tokens resolviendo sugerencias rápidas localmente y cacheando consultas repetidas.
  */
-export async function procesarMensajeChat({ mensaje, idEmpresa = DEFAULT_EMPRESA_ID, idUsuario = DEFAULT_USUARIO_ID }) {
+export async function procesarMensajeChat({ mensaje, idEmpresa, idUsuario }) {
   const contexto = await obtenerContextoAsistencia(idEmpresa);
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
@@ -218,7 +212,7 @@ export async function procesarMensajeChat({ mensaje, idEmpresa = DEFAULT_EMPRESA
         .map((c) => `${c.nombre}(${c.codigo_biometrico},${c.departamento}):${c.estado} ${c.hora_entrada}${c.minutos_tardanza ? ` +${c.minutos_tardanza}m` : ''}`)
         .join(' | ');
 
-      const systemPrompt = `Asistente RRHH AsistenciaAI. Responde en español, breve (máx 3 líneas) a Sarah. Datos reales BD: Presentes=${contexto.resumen.presentes}, Tardanzas=${contexto.resumen.tardanzas}, Ausentes=${contexto.resumen.ausentes}. Personal: ${listaCompacta}`;
+      const systemPrompt = `Asistente RRHH AsistenciaAI. Responde en español, breve (máx 3 líneas). Datos reales BD de la empresa: Presentes=${contexto.resumen.presentes}, Tardanzas=${contexto.resumen.tardanzas}, Ausentes=${contexto.resumen.ausentes}. Personal: ${listaCompacta}`;
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -251,33 +245,46 @@ export async function procesarMensajeChat({ mensaje, idEmpresa = DEFAULT_EMPRESA
   }
 
   // Guardar la interacción en Supabase (tabla historial_chat)
-  const { data: filaGuardada } = await supabase
-    .from('historial_chat')
-    .insert([
-      {
-        id_empresa: idEmpresa,
-        id_usuario: idUsuario,
-        mensaje,
-        respuesta: resultado.respuesta,
-        metadata: resultado.metadata || {},
-      },
-    ])
-    .select()
-    .single();
+  let idRegistro = `chat-${Date.now()}`;
+  if (idEmpresa) {
+    const { data: filaGuardada } = await supabase
+      .from('historial_chat')
+      .insert([
+        {
+          id_empresa: idEmpresa,
+          id_usuario: idUsuario || null,
+          mensaje,
+          respuesta: resultado.respuesta,
+          metadata: resultado.metadata || {},
+        },
+      ])
+      .select()
+      .single();
+
+    if (filaGuardada?.id) idRegistro = filaGuardada.id;
+  }
 
   return {
-    id: filaGuardada?.id || crypto.randomUUID(),
+    id: idRegistro,
     mensaje,
     respuesta: resultado.respuesta,
     metadata: resultado.metadata || {},
-    fecha: filaGuardada?.fecha || new Date().toISOString(),
+    fecha: new Date().toISOString(),
   };
 }
 
 /**
  * Obtiene el historial completo del chat y el resumen del día desde Supabase
  */
-export async function obtenerEstadoInicialChat(idEmpresa = DEFAULT_EMPRESA_ID) {
+export async function obtenerEstadoInicialChat(idEmpresa) {
+  if (!idEmpresa) {
+    return {
+      resumen: { presentes: 0, tardanzas: 0, ausentes: 0, total_plantilla: 0, puntualidad_semanal: '100%' },
+      colaboradores: [],
+      historial: [],
+    };
+  }
+
   const contexto = await obtenerContextoAsistencia(idEmpresa);
 
   const { data: historial } = await supabase
@@ -297,7 +304,9 @@ export async function obtenerEstadoInicialChat(idEmpresa = DEFAULT_EMPRESA_ID) {
 /**
  * Limpia el historial de conversación en Supabase
  */
-export async function limpiarHistorial(idEmpresa = DEFAULT_EMPRESA_ID) {
+export async function limpiarHistorial(idEmpresa) {
+  if (!idEmpresa) return { ok: true, error: null };
+
   const { error } = await supabase
     .from('historial_chat')
     .delete()
@@ -312,9 +321,13 @@ export async function limpiarHistorial(idEmpresa = DEFAULT_EMPRESA_ID) {
 export async function justificarAsistenciaEmpleado({
   idEmpleado,
   motivo = 'Tardanza justificada por Gerencia RRHH desde Asistente IA',
-  idEmpresa = DEFAULT_EMPRESA_ID,
-  idUsuario = DEFAULT_USUARIO_ID,
+  idEmpresa,
+  idUsuario,
 }) {
+  if (!idEmpresa || !idEmpleado) {
+    return { ok: false, error: 'Parámetros requeridos ausentes.' };
+  }
+
   // Actualizar asistencia del empleado
   const { error: errAsist } = await supabase
     .from('asistencias')
@@ -326,21 +339,22 @@ export async function justificarAsistenciaEmpleado({
     .eq('id_empleado', idEmpleado);
 
   // Registrar solicitud de permiso aprobada
-  await supabase.from('solicitudes_permiso').insert([
-    {
-      id_empresa: idEmpresa,
-      id_empleado: idEmpleado,
-      id_usuario_aprobador: idUsuario,
-      fecha_inicio: new Date().toISOString().slice(0, 10),
-      fecha_fin: new Date().toISOString().slice(0, 10),
-      motivo,
-      estado: 'APROBADO',
-    },
-  ]);
+  if (idUsuario) {
+    await supabase.from('solicitudes_permiso').insert([
+      {
+        id_empresa: idEmpresa,
+        id_empleado: idEmpleado,
+        id_usuario_aprobador: idUsuario,
+        fecha_inicio: new Date().toISOString().slice(0, 10),
+        fecha_fin: new Date().toISOString().slice(0, 10),
+        motivo,
+        estado: 'APROBADO',
+      },
+    ]);
+  }
 
   return {
     ok: !errAsist,
     mensaje: 'La tardanza del colaborador ha sido justificada correctamente en el sistema.',
   };
 }
-

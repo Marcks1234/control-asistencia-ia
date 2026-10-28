@@ -298,7 +298,7 @@ VALUES
     NULL,
     NULL,
     NULL,
-    199.00,
+    120.00,
     '["Cámaras ilimitadas", "Soporte técnico inteligente", "Múltiples sedes", "Reportes Inteligentes"]'::jsonb,
     FALSE,
     TRUE

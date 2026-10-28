@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js';
+import { Plan } from '../models/Plan.js';
 
 /**
  * Repositorio para Suscripciones y Planes Comerciales
@@ -16,7 +17,7 @@ export const suscripcionRepository = {
       .order('precio_mensual', { ascending: true });
 
     if (error) throw new Error(`Error al obtener planes: ${error.message}`);
-    return data || [];
+    return (data || []).map((p) => new Plan(p));
   },
 
   /**
@@ -31,7 +32,7 @@ export const suscripcionRepository = {
         .maybeSingle();
 
       if (error) throw new Error(`Error al obtener plan: ${error.message}`);
-      if (data) return data;
+      if (data) return new Plan(data);
     }
 
     // Si no se encuentra o no se pasa, tomar el recomendado o el primero
@@ -44,7 +45,7 @@ export const suscripcionRepository = {
       .maybeSingle();
 
     if (errDef) throw new Error(`Error al obtener plan por defecto: ${errDef.message}`);
-    return planDefault;
+    return planDefault ? new Plan(planDefault) : null;
   },
 
   /**
@@ -90,4 +91,3 @@ export const suscripcionRepository = {
     return data;
   },
 };
-

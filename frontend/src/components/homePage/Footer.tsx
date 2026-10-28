@@ -35,13 +35,13 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/#Funciones" className="hover:text-white transition">
+                <Link href="/#login" className="hover:text-white transition">
                   Visión Artificial
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/entradas-salidas"
+                  href="/#login"
                   className="hover:text-white transition"
                 >
                   Panel de RRHH
@@ -49,7 +49,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/asistente-ia"
+                  href="/#login"
                   className="hover:text-white transition"
                 >
                   Asistente Inteligente

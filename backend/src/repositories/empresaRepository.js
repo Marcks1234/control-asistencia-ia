@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js';
+import { Empresa } from '../models/Empresa.js';
 
 /**
  * Repositorio para la entidad Empresa (Tenant SaaS)
@@ -16,7 +17,7 @@ export const empresaRepository = {
       .maybeSingle();
 
     if (error) throw new Error(`Error al buscar empresa por RUC: ${error.message}`);
-    return data;
+    return data ? new Empresa(data) : null;
   },
 
   /**
@@ -30,7 +31,7 @@ export const empresaRepository = {
       .maybeSingle();
 
     if (error) throw new Error(`Error al buscar empresa por ID: ${error.message}`);
-    return data;
+    return data ? new Empresa(data) : null;
   },
 
   /**
@@ -54,7 +55,7 @@ export const empresaRepository = {
       .single();
 
     if (error) throw new Error(`Error al crear empresa: ${error.message}`);
-    return data;
+    return data ? new Empresa(data) : null;
   },
 
   /**
@@ -81,4 +82,3 @@ export const empresaRepository = {
     return data;
   },
 };
-
