@@ -26,21 +26,14 @@ export default function NavBar() {
       </nav>
 
       {/* Parte Derecha */}
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center">
         <Link
           href="/#login"
           className="text-xs font-medium text-gray-600 hover:text-gray-900 px-3 py-1.5"
         >
           Iniciar sesión
         </Link>
-        <Link
-          href="/registro"
-          className="btn-home-page-secundary text-xs px-4 py-2 inline-block"
-        >
-          Empezar Gratis
-        </Link>
       </div>
     </header>
   );
 }
-
