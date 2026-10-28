@@ -1,20 +1,96 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 interface SidebarProps {
   activeItem?: string;
 }
 
+interface UsuarioSesion {
+  nombre: string;
+  apellido: string;
+  rol: string;
+  correo?: string;
+}
+
 export default function Sidebar({ activeItem }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const [usuario, setUsuario] = useState<UsuarioSesion>({
+    nombre: "Sarah",
+    apellido: "Miller",
+    rol: "Gerente RRHH",
+  });
+
+  useEffect(() => {
+    const guardado = localStorage.getItem("asistencia_usuario");
+    if (guardado) {
+      try {
+        const parsed = JSON.parse(guardado);
+        if (parsed?.nombre) {
+          setUsuario({
+            nombre: parsed.nombre,
+            apellido: parsed.apellido || "",
+            rol:
+              parsed.rol === "GERENTE"
+                ? "Gerente RRHH"
+                : parsed.rol || "Gerente RRHH",
+            correo: parsed.correo,
+          });
+        }
+      } catch {}
+    }
+
+    const token = localStorage.getItem("asistencia_jwt");
+    fetch("/api/auth/me", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok && data.usuario?.nombre) {
+          const u = {
+            nombre: data.usuario.nombre,
+            apellido: data.usuario.apellido || "",
+            rol:
+              data.usuario.rol === "GERENTE"
+                ? "Gerente RRHH"
+                : data.usuario.rol || "Gerente RRHH",
+            correo: data.usuario.correo,
+          };
+          setUsuario(u);
+          localStorage.setItem(
+            "asistencia_usuario",
+            JSON.stringify(data.usuario)
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const manejarCerrarSesion = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    localStorage.removeItem("asistencia_jwt");
+    localStorage.removeItem("asistencia_usuario");
+    router.push("/#login");
+  };
+
+  const nombreCompleto =
+    `${usuario.nombre} ${usuario.apellido}`.trim() || "Sarah Miller";
+  const iniciales = `${usuario.nombre?.[0] || "S"}${
+    usuario.apellido?.[0] || "M"
+  }`.toUpperCase();
 
   const navItems = [
     {
       id: "dashboard",
       label: "Dashboard",
-      href: "/dashboard",
+      href: "/entradas-salidas",
+      habilitado: false,
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
           <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -27,7 +103,8 @@ export default function Sidebar({ activeItem }: SidebarProps) {
     {
       id: "personal",
       label: "Personal",
-      href: "/personal",
+      href: "/entradas-salidas",
+      habilitado: false,
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -39,7 +116,8 @@ export default function Sidebar({ activeItem }: SidebarProps) {
     {
       id: "camaras-ia",
       label: "Cámaras IA",
-      href: "/camaras-ia",
+      href: "/entradas-salidas",
+      habilitado: false,
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="m15 10 4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14v-4Z" />
@@ -51,6 +129,7 @@ export default function Sidebar({ activeItem }: SidebarProps) {
       id: "entradas-salidas",
       label: "Entradas / Salidas",
       href: "/entradas-salidas",
+      habilitado: true,
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
@@ -60,7 +139,8 @@ export default function Sidebar({ activeItem }: SidebarProps) {
     {
       id: "reportes",
       label: "Reportes",
-      href: "/reportes",
+      href: "/entradas-salidas",
+      habilitado: false,
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -72,6 +152,7 @@ export default function Sidebar({ activeItem }: SidebarProps) {
       id: "asistente-ia",
       label: "Asistente IA",
       href: "/asistente-ia",
+      habilitado: true,
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
           <path
@@ -89,7 +170,7 @@ export default function Sidebar({ activeItem }: SidebarProps) {
       {/* Parte superior: Logo + Navegación */}
       <div>
         {/* Cabecera de marca */}
-        <div className="px-5 pt-6 pb-5 flex items-center gap-3">
+        <Link href="/" className="px-5 pt-6 pb-5 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#1D4ED8] flex items-center justify-center text-white shadow-sm">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path
@@ -107,7 +188,7 @@ export default function Sidebar({ activeItem }: SidebarProps) {
               Control &amp; Asistencia
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Etiqueta sección */}
         <div className="px-5 pt-2 pb-2">
@@ -120,9 +201,25 @@ export default function Sidebar({ activeItem }: SidebarProps) {
         <nav className="px-3 space-y-1">
           {navItems.map((item) => {
             const isActive =
-              activeItem === item.id ||
-              pathname === item.href ||
-              pathname?.startsWith(`${item.href}/`);
+              item.habilitado &&
+              (activeItem === item.id ||
+                pathname === item.href ||
+                pathname?.startsWith(`${item.href}/`));
+
+            if (!item.habilitado) {
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  title="Módulo previsto para el siguiente entregable"
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 transition-all text-left cursor-pointer"
+                >
+                  <span className="text-slate-400">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.id}
@@ -168,31 +265,44 @@ export default function Sidebar({ activeItem }: SidebarProps) {
           <span>Configuración</span>
         </button>
 
-        {/* Tarjeta de usuario */}
+        {/* Tarjeta de usuario (Sincronizada con sesión JWT) */}
         <div className="mt-2 pt-2 border-t border-slate-100">
           <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/90 border border-slate-200/70">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-linear-to-tr from-amber-700 to-amber-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                SM
+              <div
+                className="w-8 h-8 rounded-full bg-linear-to-tr from-amber-700 to-amber-500 text-white font-bold text-xs flex items-center justify-center shrink-0"
+                suppressHydrationWarning
+              >
+                {iniciales}
               </div>
               <div className="leading-tight">
-                <div className="text-xs font-bold text-slate-800">Sarah Miller</div>
-                <div className="text-[11px] text-slate-400">Gerente RRHH</div>
+                <div
+                  className="text-xs font-bold text-slate-800"
+                  suppressHydrationWarning
+                >
+                  {nombreCompleto}
+                </div>
+                <div
+                  className="text-[11px] text-slate-400"
+                  suppressHydrationWarning
+                >
+                  {usuario.rol}
+                </div>
               </div>
             </div>
-            <Link
-              href="/"
+            <button
+              type="button"
+              onClick={manejarCerrarSesion}
               title="Cerrar sesión"
-              className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-200/50 transition"
+              className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-200/50 transition cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
               </svg>
-            </Link>
+            </button>
           </div>
         </div>
       </div>
     </aside>
   );
 }
-

@@ -21,7 +21,6 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
   const [records, setRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE_RECORDS);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Cargar datos reales desde Supabase al iniciar
   useEffect(() => {
     let cancelado = false;
     async function cargarDatos() {
@@ -44,94 +43,59 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
     };
   }, []);
 
-  const handleRegisterCheckIn = async (employee: Employee) => {
+  const handleRegisterCheckIn = async (
+    employee: Employee
+  ): Promise<{ ok: boolean; mensaje?: string; error?: string }> => {
     const now = new Date();
     const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
       now.getMinutes()
     ).padStart(2, "0")}`;
 
-    // 1. Actualización optimista inmediata en la UI
-    setRecords((prev) => {
-      const existingIndex = prev.findIndex((r) => r.employeeId === employee.id);
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          status: "presente",
-          checkIn: timeFormatted,
-          checkOut: "En curso",
-          note: null,
-          noteType: undefined,
-        };
-        return updated;
-      } else {
-        const newRecord: AttendanceRecord = {
-          id: `rec-${Date.now()}`,
-          employeeId: employee.id,
-          name: employee.name,
-          department: employee.department,
-          shift: employee.shift,
-          shiftTime: employee.startTime,
-          status: "presente",
-          checkIn: timeFormatted,
-          checkOut: "En curso",
-          hours: "0h 01m",
-          note: null,
-        };
-        return [newRecord, ...prev];
-      }
-    });
-
-    setEmployees((prev) =>
-      prev.map((e) => (e.id === employee.id ? { ...e, status: "presente" } : e))
+    const respuesta = await registrarEntradaEmpleado(
+      employee.id,
+      `${timeFormatted}:00`
     );
 
-    // 2. Persistencia en la base de datos Supabase
-    await registrarEntradaEmpleado(employee.id, `${timeFormatted}:00`);
+    if (!respuesta.ok) {
+      return respuesta;
+    }
 
-    // 3. Re-sincronizar con Supabase para confirmar
     const fresca = await fetchAsistencias();
     if (fresca.records.length > 0) setRecords(fresca.records);
     if (fresca.employees.length > 0) setEmployees(fresca.employees);
+
+    return respuesta;
   };
 
-  const handleRegisterCheckOut = async (employee: Employee) => {
+  const handleRegisterCheckOut = async (
+    employee: Employee
+  ): Promise<{ ok: boolean; mensaje?: string; error?: string }> => {
     const now = new Date();
     const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
       now.getMinutes()
     ).padStart(2, "0")}`;
 
-    // 1. Actualización optimista inmediata
-    setRecords((prev) =>
-      prev.map((rec) => {
-        if (rec.employeeId === employee.id) {
-          return {
-            ...rec,
-            checkOut: timeFormatted,
-            hours: "8h 00m",
-          };
-        }
-        return rec;
-      })
+    const respuesta = await registrarSalidaEmpleado(
+      employee.id,
+      `${timeFormatted}:00`
     );
 
-    // 2. Persistencia en la base de datos Supabase
-    await registrarSalidaEmpleado(employee.id, `${timeFormatted}:00`);
+    if (!respuesta.ok) {
+      return respuesta;
+    }
 
-    // 3. Re-sincronizar con Supabase para confirmar
     const fresca = await fetchAsistencias();
     if (fresca.records.length > 0) setRecords(fresca.records);
     if (fresca.employees.length > 0) setEmployees(fresca.employees);
+
+    return respuesta;
   };
 
   return (
     <div className="w-full flex flex-col space-y-6">
-      {/* Page Title & Shift Badge */}
       <PageHeader />
 
-      {/* Main 2-Column Dashboard Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Manual Registration Card (5 of 12 cols on desktop) */}
         <div className="lg:col-span-5">
           <ManualRegistrationCard
             employees={employees}
@@ -141,7 +105,6 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
           />
         </div>
 
-        {/* Right Column: Daily Attendance Table Card (7 of 12 cols on desktop) */}
         <div className="lg:col-span-7">
           <DailyAttendanceCard
             records={records}

@@ -48,12 +48,34 @@ export default function ChatWindow({
   const [inputMensaje, setInputMensaje] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [horaSaludo, setHoraSaludo] = useState<string>("08:00 AM");
+  const [nombreUsuario, setNombreUsuario] = useState<string>("Sarah");
+  const [nombreCompletoUsuario, setNombreCompletoUsuario] =
+    useState<string>("Sarah Miller");
+  const [inicialesUsuario, setInicialesUsuario] = useState<string>("SM");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Cargar conteo real de Supabase e historial al montar
+  // Cargar conteo real de Supabase, sesión JWT e historial al montar
   useEffect(() => {
     setHoraSaludo(formatearHoraMensaje());
+    try {
+      const guardado = localStorage.getItem("asistencia_usuario");
+      if (guardado) {
+        const parsed = JSON.parse(guardado);
+        if (parsed?.nombre) {
+          setNombreUsuario(parsed.nombre);
+          setNombreCompletoUsuario(
+            `${parsed.nombre} ${parsed.apellido || ""}`.trim()
+          );
+          setInicialesUsuario(
+            `${parsed.nombre?.[0] || "S"}${
+              parsed.apellido?.[0] || "M"
+            }`.toUpperCase()
+          );
+        }
+      }
+    } catch {}
+
     let cancelado = false;
     fetchEstadoAsistente().then((data) => {
       if (cancelado) return;
@@ -222,7 +244,7 @@ export default function ChatWindow({
                   <span>Consultando asistencias en la base de datos...</span>
                 ) : (
                   <>
-                    Hola Sarah, hoy tenemos{" "}
+                    Hola <span suppressHydrationWarning>{nombreUsuario}</span>, hoy tenemos{" "}
                     <span className="font-bold text-emerald-600">
                       {resumen.presentes} {resumen.presentes === 1 ? "presente" : "presentes"}
                     </span>
@@ -262,15 +284,23 @@ export default function ChatWindow({
             const horaFormateada = formatearHoraMensaje(item.fecha);
             return (
               <div key={item.id} className="space-y-5">
-                {/* Mensaje del usuario (Sarah Miller) a la derecha */}
+                {/* Mensaje del usuario autenticado a la derecha */}
                 <div className="flex flex-col items-end">
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-[11px] text-slate-400" suppressHydrationWarning>
                       {horaFormateada}
                     </span>
-                    <span className="text-xs font-bold text-slate-800">Sarah Miller</span>
-                    <div className="w-6 h-6 rounded-full bg-linear-to-tr from-amber-700 to-amber-500 text-white font-bold text-[10px] flex items-center justify-center">
-                      SM
+                    <span
+                      className="text-xs font-bold text-slate-800"
+                      suppressHydrationWarning
+                    >
+                      {nombreCompletoUsuario}
+                    </span>
+                    <div
+                      className="w-6 h-6 rounded-full bg-linear-to-tr from-amber-700 to-amber-500 text-white font-bold text-[10px] flex items-center justify-center"
+                      suppressHydrationWarning
+                    >
+                      {inicialesUsuario}
                     </div>
                   </div>
                   <div className="bg-[#1D63ED] text-white text-xs font-medium px-4 py-3 rounded-2xl rounded-tr-sm max-w-md shadow-xs whitespace-pre-wrap leading-relaxed">
@@ -345,7 +375,7 @@ export default function ChatWindow({
           <div ref={chatEndRef} />
         </div>
 
-        {/* Barra inferior de entrada de texto (sin icono de adjuntar archivo) */}
+        {/* Barra inferior de entrada de texto */}
         <div className="p-4 border-t border-slate-100 bg-white">
           <form
             onSubmit={(e) => {

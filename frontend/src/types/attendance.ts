@@ -9,6 +9,8 @@ export interface Employee {
   shiftSchedule: string;
   startTime: string;
   status: AttendanceStatus;
+  checkIn?: string | null;
+  checkOut?: string | null;
 }
 
 export interface AttendanceRecord {
@@ -27,4 +29,3 @@ export interface AttendanceRecord {
 }
 
 export type FilterStatus = 'todos' | 'presente' | 'ausente' | 'tardanza' | 'permiso' | 'esperado';
-
