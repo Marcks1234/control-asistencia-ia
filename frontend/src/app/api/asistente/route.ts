@@ -1,106 +1,69 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { querySupabase, resolverContextoEmpresa } from '@/lib/supabase';
+import { obtenerFechaHoyPeru } from '@/lib/utils';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://txtftxqhnqxpanptiudt.supabase.co';
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
-
-function obtenerFechaHoyPeru(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Lima',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-async function querySupabase(endpoint: string) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    cache: 'no-store',
-  });
-  if (!res.ok) return [];
-  return await res.json();
-}
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { idEmpresa } = resolverContextoEmpresa(req);
     const fechaHoy = obtenerFechaHoyPeru();
 
-    const [empleados, asistencias, historial, usuarios] = await Promise.all([
-      querySupabase('empleados?select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual&activo=eq.true'),
-      querySupabase(`asistencias?fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`),
-      querySupabase('historial_chat?select=id,mensaje,respuesta,metadata,fecha&order=fecha.asc&limit=50'),
-      querySupabase('usuarios?select=nombre,apellido,rol&activo=eq.true&limit=1'),
+    const [empleados, asistencias, historial] = await Promise.all([
+      querySupabase<any[]>(
+        `empleados?id_empresa=eq.${idEmpresa}&select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual&activo=eq.true`
+      ),
+      querySupabase<any[]>(
+        `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`
+      ),
+      querySupabase<any[]>(
+        `historial_chat?id_empresa=eq.${idEmpresa}&select=id,mensaje,respuesta,metadata,fecha&order=fecha.asc&limit=50`
+      ),
     ]);
 
     const listaEmpleados = Array.isArray(empleados) ? empleados : [];
     const listaAsistencias = Array.isArray(asistencias) ? asistencias : [];
 
-    // Tomar la asistencia del día actual por cada empleado activo
-    const mapaAsistencia = new Map<string, any>();
-    for (const a of listaAsistencias) {
-      if (!mapaAsistencia.has(a.id_empleado)) {
-        mapaAsistencia.set(a.id_empleado, a);
-      }
-    }
-
     let presentes = 0;
     let tardanzas = 0;
     let ausentes = 0;
 
-    for (const emp of listaEmpleados) {
-      const reg = mapaAsistencia.get(emp.id);
-      if (!reg || reg.estado === 'FALTA') {
-        ausentes++;
-      } else if (reg.estado === 'TARDANZA') {
-        tardanzas++;
-      } else {
-        presentes++;
-      }
+    const mapa = new Map<string, any>();
+    for (const a of listaAsistencias) {
+      if (!mapa.has(a.id_empleado)) mapa.set(a.id_empleado, a);
     }
 
-    const usuaria = Array.isArray(usuarios) && usuarios[0] ? usuarios[0].nombre : 'Sarah';
+    for (const emp of listaEmpleados) {
+      const a = mapa.get(emp.id);
+      const est = a?.estado ? String(a.estado).toUpperCase() : 'FALTA';
+      if (est === 'FALTA') ausentes++;
+      else if (est === 'TARDANZA') tardanzas++;
+      else presentes++;
+    }
+
+    const total = listaEmpleados.length;
+    const puntualidad = total > 0 ? Math.round((presentes / total) * 100) : 100;
 
     return NextResponse.json({
       ok: true,
-      usuaria,
-      fecha: fechaHoy,
       resumen: {
         presentes,
         tardanzas,
         ausentes,
-        total_plantilla: listaEmpleados.length,
+        total_plantilla: total,
+        puntualidad_semanal: `${puntualidad}%`,
       },
       historial: Array.isArray(historial) ? historial : [],
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: err.message,
-      },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   try {
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/historial_chat?id_empresa=eq.11111111-1111-1111-1111-111111111111`,
-      {
-        method: 'DELETE',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
-    );
-    return NextResponse.json({ ok: true, mensaje: 'Historial limpiado correctamente' });
-  } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    const { idEmpresa } = resolverContextoEmpresa(req);
+    await querySupabase(`historial_chat?id_empresa=eq.${idEmpresa}`, { method: 'DELETE' });
+    return NextResponse.json({ ok: true, mensaje: 'Historial eliminado.' });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 }

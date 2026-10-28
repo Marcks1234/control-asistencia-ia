@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 export default function LoginCard() {
   const router = useRouter();
@@ -82,7 +83,7 @@ export default function LoginCard() {
                 onChange={(e) => setCorreo(e.target.value)}
                 placeholder="correo@empresa.com"
                 required
-                className="w-full pl-2 pr-4 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-800 focus:outline-hidden focus:border-secundary transition shadow-xs"
+                className="w-full pl-3 pr-4 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-800 focus:outline-hidden focus:border-secundary transition shadow-xs"
               />
             </div>
           </div>
@@ -100,13 +101,12 @@ export default function LoginCard() {
               </Link>
             </div>
             <div className="py-1.5">
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••••••"
                 required
-                className="w-full pl-2 pr-4 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-800 focus:outline-hidden focus:border-secundary transition shadow-xs"
+                autoComplete="current-password"
               />
             </div>
           </div>
@@ -148,4 +148,3 @@ export default function LoginCard() {
     </section>
   );
 }
-

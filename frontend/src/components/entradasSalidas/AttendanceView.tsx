@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import PageHeader from "./PageHeader";
 import ManualRegistrationCard from "./ManualRegistrationCard";
 import DailyAttendanceCard from "./DailyAttendanceCard";
-import { INITIAL_ATTENDANCE_RECORDS, INITIAL_EMPLOYEES } from "@/services/mockAttendanceData";
 import { AttendanceRecord, Employee } from "@/types/attendance";
 import {
   fetchAsistencias,
@@ -17,8 +16,8 @@ interface AttendanceViewProps {
 }
 
 export default function AttendanceView({ globalSearch = "" }: AttendanceViewProps) {
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
-  const [records, setRecords] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE_RECORDS);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -27,8 +26,8 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
       try {
         const data = await fetchAsistencias();
         if (!cancelado) {
-          if (data.employees.length > 0) setEmployees(data.employees);
-          if (data.records.length > 0) setRecords(data.records);
+          setEmployees(data.employees || []);
+          setRecords(data.records || []);
         }
       } catch (err) {
         console.warn("[AttendanceView] Error cargando asistencias de Supabase:", err);
@@ -61,8 +60,8 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
     }
 
     const fresca = await fetchAsistencias();
-    if (fresca.records.length > 0) setRecords(fresca.records);
-    if (fresca.employees.length > 0) setEmployees(fresca.employees);
+    setRecords(fresca.records || []);
+    setEmployees(fresca.employees || []);
 
     return respuesta;
   };
@@ -85,8 +84,8 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
     }
 
     const fresca = await fetchAsistencias();
-    if (fresca.records.length > 0) setRecords(fresca.records);
-    if (fresca.employees.length > 0) setEmployees(fresca.employees);
+    setRecords(fresca.records || []);
+    setEmployees(fresca.employees || []);
 
     return respuesta;
   };

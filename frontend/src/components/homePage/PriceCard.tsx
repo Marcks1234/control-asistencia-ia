@@ -40,7 +40,7 @@ export default function PriceCard({
         </h3>
 
         <div className="flex items-baseline justify-center gap-1">
-          <span className="text-3xl font-extrabold tracking-tight">$</span>
+          <span className="text-2xl font-extrabold tracking-tight">S/</span>
           <span className="text-5xl font-black tracking-tight">{price}</span>
           <span
             className={`text-xs font-semibold ${

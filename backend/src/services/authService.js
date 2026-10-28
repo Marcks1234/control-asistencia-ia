@@ -157,7 +157,7 @@ export const authService = {
     const empresa = await empresaRepository.buscarPorId(usuario.id_empresa);
     const suscripcion = await suscripcionRepository.obtenerSuscripcionPorEmpresa(usuario.id_empresa);
 
-    const nombreEmpresa = empresa?.nombre || 'Corporación AsistenciaAI SAC';
+    const nombreEmpresa = empresa?.nombre || 'Mi Empresa';
 
     const token = generarTokenJWT({
       sub: usuario.id,

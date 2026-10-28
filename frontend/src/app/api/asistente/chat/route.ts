@@ -1,82 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { querySupabase, resolverContextoEmpresa } from '@/lib/supabase';
+import { obtenerFechaHoyPeru } from '@/lib/utils';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://txtftxqhnqxpanptiudt.supabase.co';
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
 const cacheRespuestas = new Map<string, string>();
-
-function obtenerFechaHoyPeru(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Lima',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-async function querySupabase(endpoint: string) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    cache: 'no-store',
-  });
-  if (!res.ok) return [];
-  return await res.json();
-}
 
 export async function POST(req: NextRequest) {
   try {
-    const { mensaje } = await req.json();
+    const { mensaje, id_empresa: bodyEmpresaId } = await req.json();
+    if (!mensaje?.trim()) return NextResponse.json({ ok: false, error: 'Mensaje vacío.' }, { status: 400 });
 
-    if (!mensaje || !String(mensaje).trim()) {
-      return NextResponse.json({ ok: false, error: 'Mensaje vacío' }, { status: 400 });
-    }
-
+    const { idEmpresa, nombreUsuario, idUsuario, empresaNombre } = resolverContextoEmpresa(req, bodyEmpresaId);
     const consulta = String(mensaje).trim();
     const consultaNorm = consulta.toLowerCase();
     const fechaHoy = obtenerFechaHoyPeru();
 
-    // 1. Obtener datos reales del día actual (fechaHoy) desde Supabase
     const [empleados, asistencias] = await Promise.all([
-      querySupabase('empleados?select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual,dni,departamentos(nombre)&activo=eq.true'),
-      querySupabase(`asistencias?fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,hora_salida,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`),
+      querySupabase<any[]>(
+        `empleados?id_empresa=eq.${idEmpresa}&select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual,dni,departamentos(nombre)&activo=eq.true`
+      ),
+      querySupabase<any[]>(
+        `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,hora_salida,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`
+      ),
     ]);
 
-    const mapaAsistencia = new Map<string, any>();
-    for (const a of asistencias as any[]) {
-      if (!mapaAsistencia.has(a.id_empleado)) {
-        mapaAsistencia.set(a.id_empleado, a);
-      }
+    const listaEmpleados = Array.isArray(empleados) ? empleados : [];
+    const listaAsistencias = Array.isArray(asistencias) ? asistencias : [];
+
+    const mapa = new Map<string, any>();
+    for (const a of listaAsistencias) {
+      if (!mapa.has(a.id_empleado)) mapa.set(a.id_empleado, a);
     }
 
     let presentes = 0;
     let tardanzas = 0;
     let ausentes = 0;
 
-    const datosColaboradores = (empleados as any[]).map((emp) => {
-      const asist = mapaAsistencia.get(emp.id);
-      const estado = asist?.estado || 'FALTA';
+    const datosColaboradores = listaEmpleados.map((emp) => {
+      const asist = mapa.get(emp.id);
+      const estado = asist?.estado ? String(asist.estado).toUpperCase() : 'FALTA';
       if (estado === 'FALTA') ausentes++;
       else if (estado === 'TARDANZA') tardanzas++;
       else presentes++;
 
       return {
         id: emp.id,
-        nombre: `${emp.nombre} ${emp.apellido}`,
+        nombre: `${emp.nombre} ${emp.apellido}`.trim(),
         dni: emp.dni,
-        cargo: emp.cargo,
+        cargo: emp.cargo || 'Colaborador',
         departamento: emp.departamentos?.nombre || 'Operaciones',
-        codigo_biometrico: emp.codigo_biometrico,
+        codigo_biometrico: emp.codigo_biometrico || 'BIO-0000',
         estado,
         hora_entrada: asist?.hora_entrada ? asist.hora_entrada.slice(0, 5) : 'Sin registro',
         hora_salida: asist?.hora_salida ? asist.hora_salida.slice(0, 5) : 'En curso',
         minutos_tardanza: asist?.minutos_tardanza || 0,
-        punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Torniquete A (Cámara 01)',
+        punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Torniquete Central',
         confianza_ia: asist?.confianza_ia ? Number(asist.confianza_ia) : 98.4,
         motivo: asist?.observacion || 'Sin observaciones',
       };
@@ -85,87 +64,67 @@ export async function POST(req: NextRequest) {
     const empleadoTardanza =
       datosColaboradores.find((c) => c.estado === 'TARDANZA') ||
       datosColaboradores.find((c) => c.minutos_tardanza > 0) ||
-      datosColaboradores.find((c) => c.codigo_biometrico === 'BIO-7721') ||
       datosColaboradores[0];
+
     let respuestaTexto = '';
     let metadata: any = {};
-
-    // Clave de caché incluye el estado actual para nunca devolver conteos desactualizados
-    const claveCache = `${consultaNorm}|${presentes}-${tardanzas}-${ausentes}`;
+    const claveCache = `${idEmpresa}|${consultaNorm}|${presentes}-${tardanzas}-${ausentes}`;
 
     if (consultaNorm === '¿quién llegó tarde hoy y cuál es el motivo?' || consultaNorm === '¿quién llegó tarde hoy?') {
-      if (empleadoTardanza && empleadoTardanza.estado === 'TARDANZA') {
-        respuestaTexto = `Hoy (${fechaHoy}) se registra ${tardanzas} tardanza en la base de datos: ${empleadoTardanza.nombre} (${empleadoTardanza.codigo_biometrico}) del área de ${empleadoTardanza.departamento}, quien ingresó a las ${empleadoTardanza.hora_entrada} (+${empleadoTardanza.minutos_tardanza} min). Motivo: ${empleadoTardanza.motivo}.`;
+      if (empleadoTardanza?.estado === 'TARDANZA') {
+        respuestaTexto = `Hoy (${fechaHoy}) en ${empresaNombre} se registra ${tardanzas} tardanza: ${empleadoTardanza.nombre} (${empleadoTardanza.codigo_biometrico}) del área de ${empleadoTardanza.departamento}, quien ingresó a las ${empleadoTardanza.hora_entrada} (+${empleadoTardanza.minutos_tardanza} min). Motivo: ${empleadoTardanza.motivo}.`;
       } else {
-        respuestaTexto = `Hoy (${fechaHoy}) no se registran tardanzas pendientes en la base de datos (${presentes} presentes y ${ausentes} ausentes).`;
+        respuestaTexto = `Hoy (${fechaHoy}) en ${empresaNombre} no se registran tardanzas (${presentes} presentes y ${ausentes} ausentes).`;
       }
     } else if (consultaNorm === 'ver reporte de operaciones') {
       const opList = datosColaboradores.filter((c) => c.departamento.toLowerCase().includes('operaciones'));
-      const detalleOp = opList.map((c) => `${c.nombre}: ${c.estado} (${c.hora_entrada})`).join(' | ');
-      respuestaTexto = `Reporte de Operaciones de hoy (${opList.length} colaboradores): ${detalleOp}.`;
+      const det = opList.map((c) => `${c.nombre}: ${c.estado} (${c.hora_entrada})`).join(' | ');
+      respuestaTexto = `Reporte de Operaciones (${opList.length} colaboradores): ${det || 'Sin registros'}.`;
     } else if (consultaNorm === 'generar resumen del día') {
-      const detalleGeneral = datosColaboradores.map((c) => `${c.nombre} (${c.departamento}): ${c.estado}`).join(', ');
-      respuestaTexto = `Resumen de asistencia de hoy ${fechaHoy} (${datosColaboradores.length} colaboradores): ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes. Detalle: ${detalleGeneral}.`;
+      const det = datosColaboradores.map((c) => `${c.nombre}: ${c.estado}`).join(', ');
+      respuestaTexto = `Resumen de hoy ${fechaHoy} (${datosColaboradores.length} colaboradores): ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes. Detalle: ${det}.`;
     } else if (cacheRespuestas.has(claveCache)) {
       respuestaTexto = cacheRespuestas.get(claveCache)!;
-    } else if (OPENAI_API_KEY && OPENAI_API_KEY.startsWith('sk-')) {
+    } else if (OPENAI_API_KEY?.startsWith('sk-')) {
       try {
-        const resumenCompacto = datosColaboradores
-          .map((c) => `${c.nombre}[${c.codigo_biometrico},${c.departamento}]:${c.estado}(Entrada:${c.hora_entrada},+${c.minutos_tardanza}m,${c.motivo})`)
+        const resumen = datosColaboradores
+          .map((c) => `${c.nombre}[${c.cargo},${c.departamento}]:${c.estado}(${c.hora_entrada},+${c.minutos_tardanza}m,${c.motivo})`)
           .join('; ');
 
-        const systemPrompt = `Eres AsistenciaAI. Responde en español, breve y directo (máx 3 oraciones) usando solo estos datos reales de hoy (${fechaHoy}): Total=${datosColaboradores.length}, Presentes=${presentes}, Tardanzas=${tardanzas}, Ausentes=${ausentes}. Personal: ${resumenCompacto}`;
+        const systemPrompt = `Asistente RRHH para "${empresaNombre}". Usuario: "${nombreUsuario}". Responde breve en español (máx 3 oraciones) usando solo estos datos reales: Total colaboradores = ${datosColaboradores.length}, Presentes = ${presentes}, Tardanzas = ${tardanzas}, Ausentes = ${ausentes}. Personal: ${resumen || 'Ninguno'}. Si preguntan cuántos empleados hay, responde ${datosColaboradores.length}.`;
 
         const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: OPENAI_MODEL,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: consulta },
-            ],
+            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: consulta }],
             temperature: 0.2,
-            max_tokens: 140,
+            max_tokens: 160,
           }),
         });
 
         if (openAiRes.ok) {
           const aiJson = await openAiRes.json();
           respuestaTexto = aiJson.choices?.[0]?.message?.content?.trim() || '';
-          if (respuestaTexto) {
-            cacheRespuestas.set(claveCache, respuestaTexto);
-          }
+          if (respuestaTexto) cacheRespuestas.set(claveCache, respuestaTexto);
         }
-      } catch (err: any) {
-        console.warn('[OpenAI Fallback]', err.message);
-      }
+      } catch {}
     }
 
     if (!respuestaTexto) {
-      respuestaTexto = `Según los registros de hoy (${fechaHoy}), contamos con ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes de un total de ${datosColaboradores.length} colaboradores.`;
+      respuestaTexto = `En ${empresaNombre}, hoy (${fechaHoy}) cuentas con ${datosColaboradores.length} colaboradores: ${presentes} presentes, ${tardanzas} con tardanza y ${ausentes} ausentes.`;
     }
 
     if (
       empleadoTardanza &&
-      (consultaNorm.includes('tarde') ||
-        consultaNorm.includes('tardanza') ||
-        consultaNorm.includes('miguel') ||
-        consultaNorm.includes('7721'))
+      (consultaNorm.includes('tarde') || consultaNorm.includes('tardanza') || consultaNorm.includes(empleadoTardanza.nombre.toLowerCase().split(' ')[0]))
     ) {
       metadata = {
         tipo: 'TARJETA_TARDANZA',
         empleado: {
           id: empleadoTardanza.id,
-          iniciales: empleadoTardanza.nombre
-            .split(' ')
-            .map((n: string) => n[0])
-            .join('')
-            .slice(0, 2)
-            .toUpperCase(),
+          iniciales: empleadoTardanza.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
           nombre: empleadoTardanza.nombre,
           dni: empleadoTardanza.dni,
           cargo: empleadoTardanza.cargo,
@@ -182,40 +141,21 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    let filaGuardada: any = null;
-    try {
-      const saveRes = await fetch(`${SUPABASE_URL}/rest/v1/historial_chat`, {
+    if (idEmpresa) {
+      querySupabase('historial_chat', {
         method: 'POST',
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation',
-        },
-        body: JSON.stringify({
-          id_empresa: '11111111-1111-1111-1111-111111111111',
-          id_usuario: '22222222-2222-2222-2222-222222222222',
-          mensaje: consulta,
-          respuesta: respuestaTexto,
-          metadata,
-        }),
-      });
-      if (saveRes.ok) {
-        const arr = await saveRes.json();
-        filaGuardada = Array.isArray(arr) ? arr[0] : arr;
-      }
-    } catch (saveErr) {
-      console.warn('[Supabase Save Error]', saveErr);
+        body: JSON.stringify({ id_empresa: idEmpresa, id_usuario: idUsuario || null, mensaje: consulta, respuesta: respuestaTexto, metadata, fecha: new Date().toISOString() }),
+      }).catch(() => {});
     }
 
     return NextResponse.json({
       ok: true,
       interaccion: {
-        id: filaGuardada?.id || `msg-${Date.now()}`,
+        id: `chat-${Date.now()}`,
         mensaje: consulta,
         respuesta: respuestaTexto,
         metadata,
-        fecha: filaGuardada?.fecha || new Date().toISOString(),
+        fecha: new Date().toISOString(),
       },
     });
   } catch (error: any) {

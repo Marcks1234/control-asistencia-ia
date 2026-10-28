@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase.js';
+import { Usuario } from '../models/Usuario.js';
 
 /**
  * Repositorio para la entidad Usuarios Administrativos (Gerentes / RRHH)
@@ -18,7 +19,7 @@ export const usuarioRepository = {
       .maybeSingle();
 
     if (error) throw new Error(`Error al buscar usuario por correo: ${error.message}`);
-    return data;
+    return data ? new Usuario(data) : null;
   },
 
   /**
@@ -32,7 +33,7 @@ export const usuarioRepository = {
       .maybeSingle();
 
     if (error) throw new Error(`Error al buscar usuario por ID: ${error.message}`);
-    return data;
+    return data ? new Usuario(data) : null;
   },
 
   /**
@@ -57,7 +58,7 @@ export const usuarioRepository = {
       .single();
 
     if (error) throw new Error(`Error al crear usuario: ${error.message}`);
-    return data;
+    return data ? new Usuario(data) : null;
   },
 
   /**
