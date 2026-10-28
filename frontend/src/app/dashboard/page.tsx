@@ -1,33 +1,15 @@
-
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import Sidebar from "@/components/layout/Sidebar";
 import {
-  LayoutDashboard,
-  Users,
-  Camera,
-  LogIn,
-  ClipboardList,
   Bot,
-  Bell,
-  Settings,
   Search,
   Download,
   CalendarDays,
-  Menu,
-  X,
   Clock3,
-  ShieldCheck,
 } from "lucide-react";
-
-const menu = [
-  { nombre: "Dashboard", icono: LayoutDashboard, activo: true },
-  { nombre: "Personal", icono: Users, activo: false },
-  { nombre: "Cámaras IA", icono: Camera, activo: false },
-  { nombre: "Entradas / Salidas", icono: LogIn, activo: false },
-  { nombre: "Reportes", icono: ClipboardList, activo: false },
-  { nombre: "Asistente IA", icono: Bot, activo: false },
-];
 
 const actividades = [
   { nombre: "J. Medina", cargo: "TI Lead", hora: "07:00 AM", area: "TI", inicial: "JM" },
@@ -39,7 +21,6 @@ const actividades = [
 
 export default function DashboardPage() {
   const [busqueda, setBusqueda] = useState("");
-  const [menuAbierto, setMenuAbierto] = useState(false);
 
   const filtradas = useMemo(
     () =>
@@ -75,114 +56,15 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] text-[#18243D] lg:flex">
-
-      {/* Fondo del menú en móviles */}
-      {menuAbierto && (
-        <button
-          onClick={() => setMenuAbierto(false)}
-          className="fixed inset-0 z-30 bg-black/30 lg:hidden"
-          aria-label="Cerrar menú"
-        />
-      )}
-
-      {/* MENÚ LATERAL */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-100 bg-white px-4 py-6 transition-transform lg:static lg:translate-x-0 ${
-          menuAbierto ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="mb-10 flex items-center justify-between gap-2 px-2">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-blue-600 p-2.5 text-white">
-              <ShieldCheck size={22} />
-            </div>
-            <div>
-              <h1 className="text-lg font-extrabold tracking-tight">
-                AsistenciaAI
-              </h1>
-              <p className="text-[10px] font-semibold tracking-wider text-slate-400">
-                CONTROL & ASISTENCIA
-              </p>
-            </div>
-          </div>
-          <button
-            className="lg:hidden"
-            onClick={() => setMenuAbierto(false)}
-            aria-label="Cerrar"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-          Navegación principal
-        </p>
-
-        <nav className="space-y-1">
-          {menu.map(({ nombre, icono: Icono, activo }) => (
-            activo ? (
-              <a
-                key={nombre}
-                href="/dashboard"
-                className="flex items-center gap-3 rounded-lg bg-[#17223D] px-3 py-3 text-sm font-semibold text-white"
-              >
-                <Icono size={17} />
-                {nombre}
-              </a>
-            ) : (
-              <div
-                key={nombre}
-                title="Módulo pendiente de implementar"
-                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-slate-500"
-              >
-                <Icono size={17} />
-                {nombre}
-              </div>
-            )
-          ))}
-        </nav>
-
-        <div className="mt-auto space-y-1 border-t border-slate-100 pt-5">
-          <div className="flex items-center justify-between rounded-lg px-3 py-3 text-sm text-slate-500">
-            <span className="flex items-center gap-3">
-              <Bell size={17} />
-              Alertas
-            </span>
-            <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-bold text-red-500">
-              3
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-slate-500">
-            <Settings size={17} />
-            Configuración
-          </div>
-
-          <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
-              AD
-            </div>
-            <div>
-              <p className="text-sm font-bold">Administrador</p>
-              <p className="text-xs text-slate-400">Cuenta de prueba</p>
-            </div>
-          </div>
-        </div>
-      </aside>
+    <div className="min-h-screen bg-[#F4F6FB] text-[#18243D] flex">
+      {/* Menú lateral compartido en todo el sistema */}
+      <Sidebar activeItem="dashboard" />
 
       {/* CONTENIDO PRINCIPAL */}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex flex-col">
         {/* BARRA SUPERIOR */}
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 lg:px-9">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setMenuAbierto(true)}
-              className="lg:hidden"
-              aria-label="Abrir menú"
-            >
-              <Menu size={23} />
-            </button>
             <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
               <CalendarDays size={16} />
               Lunes, 07 de septiembre de 2026
@@ -200,18 +82,17 @@ export default function DashboardPage() {
               />
             </div>
 
-            <button
-              disabled
-              title="Asistente IA pendiente de implementar"
-              className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white opacity-70"
+            <Link
+              href="/asistente-ia"
+              className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition px-4 py-2.5 text-xs font-semibold text-white cursor-pointer"
             >
               <Bot size={16} />
               Asistente IA
-            </button>
+            </Link>
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1400px] p-5 lg:p-9">
+        <main className="mx-auto max-w-[1400px] w-full p-5 lg:p-9">
           {/* TÍTULO */}
           <div className="mb-7 flex items-center justify-between gap-3">
             <div>
@@ -225,7 +106,7 @@ export default function DashboardPage() {
 
             <button
               onClick={exportarCSV}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
             >
               <Download size={16} />
               Exportar
@@ -265,7 +146,7 @@ export default function DashboardPage() {
                   colaborador
                 </span>
               </div>
-              <p className="mt-2 text-sm text-amber-500">
+              <p className="mt-2 text-sm font-amber-500 text-amber-500">
                 +34 min de tolerancia
               </p>
             </div>

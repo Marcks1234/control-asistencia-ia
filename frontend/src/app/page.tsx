@@ -30,7 +30,7 @@ export default function MainPage() {
             <Link href="/registro" className="btn-home-page-primary">
               Probar gratis 14 Dias
             </Link>
-            <Link href="#Precios" className="btn-home-page-secundary">
+            <Link href="/#Precios" className="btn-home-page-secundary">
               Ver Precios
             </Link>
           </div>
