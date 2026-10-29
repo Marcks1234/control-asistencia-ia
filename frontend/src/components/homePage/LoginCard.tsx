@@ -12,7 +12,7 @@ export default function LoginCard() {
   const [cargando, setCargando] = useState(false);
   const [errorMensaje, setErrorMensaje] = useState<string | null>(null);
 
-  const manejarLogin = async (e: React.FormEvent) => {
+  const manejarLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMensaje(null);
     setCargando(true);
@@ -25,27 +25,27 @@ export default function LoginCard() {
       });
 
       const data = await res.json();
+
       if (!res.ok || !data.ok) {
         throw new Error(data.error || "Credenciales incorrectas.");
       }
 
-      if (typeof window !== "undefined") {
-        if (data.token) {
-          localStorage.setItem("asistencia_jwt", data.token);
-        }
-        if (data.data?.usuario) {
-          localStorage.setItem(
-            "asistencia_usuario",
-            JSON.stringify(data.data.usuario)
-          );
-        }
+      if (data.token) {
+        localStorage.setItem("asistencia_jwt", data.token);
       }
 
-      router.push("/entradas-salidas");
+      if (data.data?.usuario) {
+        localStorage.setItem(
+          "asistencia_usuario",
+          JSON.stringify(data.data.usuario)
+        );
+      }
+
+      router.push("/reportes");
     } catch (err: unknown) {
-      const mensaje =
-        err instanceof Error ? err.message : "Error al iniciar sesión.";
-      setErrorMensaje(mensaje);
+      setErrorMensaje(
+        err instanceof Error ? err.message : "Error al iniciar sesión."
+      );
     } finally {
       setCargando(false);
     }
@@ -61,27 +61,37 @@ export default function LoginCard() {
         <h2 className="text-3xl font-bold text-secundary leading-tight mb-2">
           Bienvenido al <br /> Control de Asistencia IA
         </h2>
+
         <p className="text-xs text-gray-400 mb-6">
           Ingresa tus credenciales para acceder a tu cuenta
         </p>
 
         {errorMensaje && (
-          <div className="mb-4 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-600">
+          <div
+            role="alert"
+            className="mb-4 p-2.5 bg-red-50 border border-red-200 rounded-md text-xs text-red-600"
+          >
             {errorMensaje}
           </div>
         )}
 
         <form onSubmit={manejarLogin} className="space-y-4">
           <div>
-            <label className="text-xs font-bold text-gray-800">
+            <label
+              htmlFor="correo"
+              className="text-xs font-bold text-gray-800"
+            >
               Correo Electrónico
             </label>
+
             <div className="py-1.5">
               <input
+                id="correo"
                 type="email"
                 value={correo}
                 onChange={(e) => setCorreo(e.target.value)}
                 placeholder="correo@empresa.com"
+                autoComplete="username"
                 required
                 className="w-full pl-3 pr-4 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-800 focus:outline-hidden focus:border-secundary transition shadow-xs"
               />
@@ -93,6 +103,7 @@ export default function LoginCard() {
               <label className="text-xs font-bold text-gray-800">
                 Contraseña
               </label>
+
               <Link
                 href="/recuperar-contrasena"
                 className="text-xs text-gray-400 hover:underline"
@@ -100,6 +111,7 @@ export default function LoginCard() {
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
+
             <div className="py-1.5">
               <PasswordInput
                 value={password}
@@ -111,13 +123,12 @@ export default function LoginCard() {
             </div>
           </div>
 
-          {/* Botón Iniciar Sesión */}
           <button
             type="submit"
             disabled={cargando}
-            className="w-full bg-primary text-white py-2.5 rounded-md font-bold text-sm mt-2 hover:opacity-90 transition shadow-sm cursor-pointer disabled:opacity-50"
+            className="w-full bg-primary text-white py-2.5 rounded-md font-bold text-sm mt-2 hover:opacity-90 enabled:active:scale-98 transition shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
           >
-            {cargando ? "Validando sesión JWT..." : "Iniciar Sesión"}
+            {cargando ? "Iniciando sesión..." : "Iniciar Sesión"}
           </button>
         </form>
 
@@ -140,6 +151,7 @@ export default function LoginCard() {
           facial avanzado y <br />
           fácil de usar.
         </h2>
+
         <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
           Compatible con cualquier dispositivo con cámara: tablets, celulares o
           computadoras.
