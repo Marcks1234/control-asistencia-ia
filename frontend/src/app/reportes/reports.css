@@ -24,13 +24,11 @@
 }
 .reports-shell button:disabled {
   cursor: not-allowed;
+  opacity: 0.48;
 }
 .reports-shell :is(button, a, input, select):focus-visible {
   outline: 3px solid #788dc6;
   outline-offset: 3px;
-}
-.reports-shell button:disabled {
-  opacity: 0.48;
 }
 
 /* Contenedor del contenido de la pagina de reportes (sin sidebar propio). */
@@ -464,12 +462,10 @@
   }
 }
 @media (max-width: 767px) {
-  
-/* Contenedor del contenido de la pagina de reportes (sin sidebar propio). */
-.reports-content {
-  width: 100%;
-}
-.reports-main {
+  .reports-content {
+    width: 100%;
+  }
+  .reports-main {
     padding-top: 20px;
     gap: 20px;
   }
@@ -562,16 +558,11 @@
   }
 }
 
-/* Interacciones: misma respuesta de hover y clic que la página principal. */
 .reports-shell :is(button, a) {
   -webkit-tap-highlight-color: transparent;
 }
 
-.reports-shell :is(.reports-card, .reports-periods button,
-  .reports-export-buttons button, .reports-pagination button,
-
-.reports-shell :is(.reports-periods button, .reports-export-buttons button,
-  .reports-pagination button, .reports-empty button):not(:disabled):active {
+.reports-shell :is(.reports-card, .reports-periods button, .reports-export-buttons button, .reports-pagination button, .reports-empty button):not(:disabled):active {
   transform: scale(0.97);
 }
 
