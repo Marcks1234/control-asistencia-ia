@@ -845,7 +845,7 @@ function ReportsPage({
   return (
     <AppLayout activeItem="reportes">
       <div className="reports-content">
-          <main className="reports-main">
+          <div className="reports-main">
             <div className="reports-page-header">
               <div>
                 <h1>Reportes y Exportación</h1>
@@ -889,7 +889,7 @@ function ReportsPage({
                 setPage(1);
               }}
             />
-          </main>
+          </div>
       </div>
       <section className="reports-print" aria-hidden="true">
         <h1>{definition.title}</h1>
