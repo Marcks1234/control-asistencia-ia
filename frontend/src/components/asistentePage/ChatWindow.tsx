@@ -7,7 +7,8 @@ import {
   fetchEstadoAsistente,
   limpiarHistorialAsistente,
 } from "@/services/asistenteService";
-import TarjetaEmpleadoTardanza from "./TarjetaEmpleadoTardanza";
+import { useAuthUser } from "@/hooks/useAuthUser";
+import ChatMessageBubble from "./ChatMessageBubble";
 
 interface ChatWindowProps {
   externalPrompt?: string | null;
@@ -25,11 +26,9 @@ function formatearHoraMensaje(isoDate?: string): string {
   }
 }
 
-const SparkleIcon = () => (
+const AiAvatarBadge = () => (
   <div className="w-9 h-9 rounded-xl bg-[#1D63ED] text-white flex items-center justify-center shrink-0 shadow-xs">
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-    </svg>
+    <img src="/imgs/icons/sparkle.svg" alt="" className="w-4 h-4" />
   </div>
 );
 
@@ -46,27 +45,13 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
   const [inputMensaje, setInputMensaje] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [horaSaludo, setHoraSaludo] = useState<string>("08:00 AM");
-  const [usuario, setUsuario] = useState({ nombre: "", nombreCompleto: "Usuario", iniciales: "U" });
 
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const usuario = useAuthUser();
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setHoraSaludo(formatearHoraMensaje());
-    try {
-      const guardado = localStorage.getItem("asistencia_usuario");
-      if (guardado) {
-        const p = JSON.parse(guardado);
-        if (p?.nombre) {
-          setUsuario({
-            nombre: p.nombre,
-            nombreCompleto: `${p.nombre} ${p.apellido || ""}`.trim(),
-            iniciales: `${p.nombre[0] || "U"}${p.apellido?.[0] || ""}`.toUpperCase(),
-          });
-        }
-      }
-    } catch {}
-
     let cancelado = false;
     fetchEstadoAsistente().then((data) => {
       if (cancelado) return;
@@ -86,7 +71,13 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
   }, [externalPrompt]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   }, [historial, enviando]);
 
   const manejarEnvioConsulta = async (textoConsulta?: string) => {
@@ -125,11 +116,11 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
   };
 
   return (
-    <div className="flex-1 flex flex-col w-full">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div className="flex-1 flex flex-col w-full min-h-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Asistente Inteligente IA</h1>
-          <p className="text-xs text-slate-500 mt-1">Consultas en tiempo real sobre asistencia, puntualidad y métricas del personal.</p>
+          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Asistente de Consultas</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Consultas de asistencia, puntualidad y colaboradores en tiempo real.</p>
         </div>
         <button
           type="button"
@@ -140,20 +131,18 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
         </button>
       </div>
 
-      <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between overflow-hidden min-h-[540px]">
-        {/* Mensajes */}
-        <div className="p-6 space-y-6 overflow-y-auto max-h-[600px]">
-          {/* Bienvenida */}
+      <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between overflow-hidden min-h-0">
+        <div ref={messagesContainerRef} className="flex-1 p-5 space-y-5 overflow-y-auto min-h-0">
           <div className="flex items-start gap-3.5">
-            <SparkleIcon />
+            <AiAvatarBadge />
             <div className="space-y-3 max-w-2xl">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-900">AsistenciaAI</span>
+                <span className="text-xs font-bold text-slate-900">Asistente</span>
                 <span className="text-[11px] text-slate-400" suppressHydrationWarning>{horaSaludo}</span>
               </div>
               <div className="bg-slate-100/80 border border-slate-200/50 rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-slate-700 leading-relaxed">
                 {cargandoResumen ? (
-                  <span>Consultando asistencias en la base de datos...</span>
+                  <span>Cargando resumen de hoy...</span>
                 ) : (
                   <>
                     Hola <span suppressHydrationWarning>{usuario.nombre}</span>, hoy tenemos{" "}
@@ -179,69 +168,39 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
             </div>
           </div>
 
-          {/* Historial */}
-          {historial.map((item) => {
-            const hora = formatearHoraMensaje(item.fecha);
-            return (
-              <div key={item.id} className="space-y-5">
-                <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[11px] text-slate-400" suppressHydrationWarning>{hora}</span>
-                    <span className="text-xs font-bold text-slate-800" suppressHydrationWarning>{usuario.nombreCompleto}</span>
-                    <div className="w-6 h-6 rounded-full bg-amber-600 text-white font-bold text-[10px] flex items-center justify-center" suppressHydrationWarning>
-                      {usuario.iniciales}
-                    </div>
-                  </div>
-                  <div className="bg-[#1D63ED] text-white text-xs font-medium px-4 py-3 rounded-2xl rounded-tr-sm max-w-md shadow-xs whitespace-pre-wrap leading-relaxed">
-                    {item.mensaje}
-                  </div>
-                </div>
-
-                {item.respuesta && (
-                  <div className="flex items-start gap-3.5">
-                    <SparkleIcon />
-                    <div className="space-y-2.5 max-w-2xl flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900">AsistenciaAI</span>
-                        <span className="text-[11px] text-slate-400" suppressHydrationWarning>{hora}</span>
-                      </div>
-                      <div className="bg-slate-100/80 border border-slate-200/50 rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                        {item.respuesta}
-                      </div>
-                      {item.metadata?.empleado && (
-                        <TarjetaEmpleadoTardanza
-                          empleado={item.metadata.empleado}
-                          onJustificado={() => {
-                            fetchEstadoAsistente().then((data) => setResumen(data.resumen));
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {historial.map((item) => (
+            <ChatMessageBubble
+              key={item.id}
+              item={item}
+              hora={formatearHoraMensaje(item.fecha)}
+              usuario={usuario}
+              onJustificado={() => {
+                fetchEstadoAsistente().then((data) => {
+                  setResumen(data.resumen);
+                  if (data.historial?.length) setHistorial(data.historial);
+                });
+              }}
+              sparkleIcon={<AiAvatarBadge />}
+            />
+          ))}
 
           {enviando && (
             <div className="flex items-start gap-3.5">
-              <SparkleIcon />
+              <AiAvatarBadge />
               <div className="space-y-1.5 max-w-2xl flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-900">AsistenciaAI</span>
+                  <span className="text-xs font-bold text-slate-900">Asistente</span>
                   <span className="text-[11px] text-blue-600 font-semibold">Procesando consulta...</span>
                 </div>
                 <div className="bg-slate-100/60 border border-slate-200/40 rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-slate-500 italic">
-                  Consultando registros biométricos en Supabase...
+                  Buscando información de asistencia...
                 </div>
               </div>
             </div>
           )}
-          <div ref={chatEndRef} />
         </div>
 
-        {/* Input */}
-        <div className="p-4 border-t border-slate-100 bg-white">
+        <div className="p-3.5 border-t border-slate-100 bg-white shrink-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -269,8 +228,8 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
             </button>
           </form>
           <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-1">
-            <span>Puedes consultar en tiempo real sobre asistencias, tardanzas, departamentos o el resumen del día.</span>
-            <span className="font-medium">IA Asistencia v2.4</span>
+            <span>Consultas en tiempo real sobre asistencias, tardanzas, departamentos o turnos.</span>
+            <span className="font-medium">Control de Asistencia</span>
           </div>
         </div>
       </div>

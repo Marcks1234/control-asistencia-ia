@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { obtenerFechaHoy } from "@/lib/dateUtils";
 
 interface TopBarProps {
   searchQuery?: string;
@@ -9,18 +10,13 @@ interface TopBarProps {
   onQuickAsk?: (pregunta: string) => void;
 }
 
-function obtenerFechaActualFormateada(): string {
-  const f = new Date().toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  return f.charAt(0).toUpperCase() + f.slice(1);
-}
-
 export default function TopBar({ searchQuery = "", onSearchChange, onQuickAsk }: TopBarProps) {
-  const [fechaHoy, setFechaHoy] = useState<string>(obtenerFechaActualFormateada);
+  const [fechaHoy, setFechaHoy] = useState<string>(obtenerFechaHoy);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    setFechaHoy(obtenerFechaActualFormateada());
+    setFechaHoy(obtenerFechaHoy());
   }, []);
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

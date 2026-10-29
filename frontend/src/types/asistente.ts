@@ -18,6 +18,7 @@ export interface EmpleadoTardanza {
 export interface MetadataMensaje {
   tipo?: 'TARJETA_TARDANZA' | 'REPORTE_OPERACIONES';
   empleado?: EmpleadoTardanza;
+  empleados?: EmpleadoTardanza[];
 }
 
 export interface InteraccionChat {
@@ -41,4 +42,3 @@ export interface EstadoInicialAsistente {
   resumen: ResumenAsistenciaDia;
   historial: InteraccionChat[];
 }
-

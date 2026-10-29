@@ -255,7 +255,7 @@ export default function RecuperarContrasenaCard() {
           Protegida
         </h2>
         <p className="text-gray-300 text-sm leading-relaxed max-w-sm">
-          Enviamos un token temporal cifrado a tu correo electrónico vía Gmail TLS SMTP para proteger la seguridad de tu empresa y colaboradores.
+          Enviamos un código temporal a tu correo electrónico para verificar tu identidad y restablecer tu acceso de forma segura.
         </p>
       </article>
     </section>

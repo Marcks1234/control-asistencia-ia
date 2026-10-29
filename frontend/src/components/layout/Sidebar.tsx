@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuthUser } from "@/hooks/useAuthUser";
 
 interface SidebarProps {
   activeItem?: string;
@@ -10,38 +11,17 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard", habilitado: true },
-  { id: "personal", label: "Personal", href: "/entradas-salidas", habilitado: false },
-  { id: "camaras-ia", label: "Cámaras IA", href: "/entradas-salidas", habilitado: false },
+  { id: "personal", label: "Gestión de Personal", href: "/agregado-prueba", habilitado: true },
   { id: "entradas-salidas", label: "Entradas / Salidas", href: "/entradas-salidas", habilitado: true },
+  { id: "asistente-ia", label: "Asistente", href: "/asistente-ia", habilitado: true },
+  { id: "camaras-ia", label: "Cámaras", href: "/entradas-salidas", habilitado: false },
   { id: "reportes", label: "Reportes", href: "/entradas-salidas", habilitado: false },
-  { id: "asistente-ia", label: "Asistente IA", href: "/asistente-ia", habilitado: true },
 ];
 
 export default function Sidebar({ activeItem }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-
-  const [usuario, setUsuario] = useState({
-    nombre: "",
-    apellido: "",
-    rol: "Gerente RRHH",
-  });
-
-  useEffect(() => {
-    const guardado = localStorage.getItem("asistencia_usuario");
-    if (guardado) {
-      try {
-        const p = JSON.parse(guardado);
-        if (p?.nombre) {
-          setUsuario({
-            nombre: p.nombre,
-            apellido: p.apellido || "",
-            rol: p.rol === "GERENTE" ? "Gerente RRHH" : p.rol || "Gerente RRHH",
-          });
-        }
-      } catch {}
-    }
-  }, []);
+  const usuario = useAuthUser();
 
   const manejarCerrarSesion = async () => {
     try {
@@ -52,13 +32,9 @@ export default function Sidebar({ activeItem }: SidebarProps) {
     router.push("/#login");
   };
 
-  const nombreCompleto = `${usuario.nombre} ${usuario.apellido}`.trim() || "Usuario";
-  const iniciales = `${usuario.nombre?.[0] || "U"}${usuario.apellido?.[0] || ""}`.toUpperCase();
-
   return (
     <aside className="w-64 shrink-0 bg-white border-r border-slate-200/80 flex flex-col justify-between min-h-screen select-none">
       <div>
-        {/* Cabecera de marca */}
         <Link href="/" className="px-5 pt-6 pb-5 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#1D4ED8] flex items-center justify-center text-white shadow-sm font-black text-sm">
             AI
@@ -83,14 +59,16 @@ export default function Sidebar({ activeItem }: SidebarProps) {
           {NAV_ITEMS.map((item) => {
             const isActive =
               item.habilitado &&
-              (activeItem === item.id || pathname === item.href || pathname?.startsWith(`${item.href}/`));
+              (activeItem === item.id ||
+                (item.id === "personal" && activeItem === "agregado-prueba") ||
+                pathname === item.href ||
+                pathname?.startsWith(`${item.href}/`));
 
             if (!item.habilitado) {
               return (
                 <button
                   key={item.id}
                   type="button"
-                  title="Módulo previsto para el siguiente entregable"
                   className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-slate-400 hover:bg-slate-50 transition-all text-left cursor-pointer"
                 >
                   <span>{item.label}</span>
@@ -115,15 +93,14 @@ export default function Sidebar({ activeItem }: SidebarProps) {
         </nav>
       </div>
 
-      {/* Perfil y Salir */}
       <div className="p-3 border-t border-slate-100 space-y-1">
         <div className="p-2.5 rounded-xl bg-slate-50/90 border border-slate-200/70 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full bg-amber-600 text-white font-bold text-xs flex items-center justify-center shrink-0" suppressHydrationWarning>
-              {iniciales}
+              {usuario.iniciales}
             </div>
             <div className="leading-tight">
-              <div className="text-xs font-bold text-slate-800" suppressHydrationWarning>{nombreCompleto}</div>
+              <div className="text-xs font-bold text-slate-800" suppressHydrationWarning>{usuario.nombreCompleto}</div>
               <div className="text-[11px] text-slate-400" suppressHydrationWarning>{usuario.rol}</div>
             </div>
           </div>

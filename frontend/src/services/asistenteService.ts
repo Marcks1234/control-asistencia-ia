@@ -60,14 +60,14 @@ export async function justificarTardanzaColaborador(
   motivo: string
 ): Promise<{ ok: boolean; mensaje: string }> {
   try {
-    const { headers } = getClientAuth();
+    const { headers, idEmpresa } = getClientAuth();
     const res = await fetch(`${API_BASE}/justificar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ idEmpleado, motivo }),
+      body: JSON.stringify({ idEmpleado, motivo, id_empresa: idEmpresa }),
     });
     return await res.json();
   } catch {
-    return { ok: true, mensaje: 'Tardanza justificada correctamente.' };
+    return { ok: true, mensaje: 'Justificación registrada correctamente.' };
   }
 }

@@ -42,53 +42,23 @@ export default function AttendanceView({ globalSearch = "" }: AttendanceViewProp
     };
   }, []);
 
-  const handleRegisterCheckIn = async (
+  const ejecutarMarcacion = async (
+    accion: (id: string, hora: string) => Promise<{ ok: boolean; mensaje?: string; error?: string }>,
     employee: Employee
   ): Promise<{ ok: boolean; mensaje?: string; error?: string }> => {
     const now = new Date();
-    const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`;
-
-    const respuesta = await registrarEntradaEmpleado(
-      employee.id,
-      `${timeFormatted}:00`
-    );
-
-    if (!respuesta.ok) {
-      return respuesta;
+    const hora = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
+    const respuesta = await accion(employee.id, hora);
+    if (respuesta.ok) {
+      const fresca = await fetchAsistencias();
+      setRecords(fresca.records || []);
+      setEmployees(fresca.employees || []);
     }
-
-    const fresca = await fetchAsistencias();
-    setRecords(fresca.records || []);
-    setEmployees(fresca.employees || []);
-
     return respuesta;
   };
 
-  const handleRegisterCheckOut = async (
-    employee: Employee
-  ): Promise<{ ok: boolean; mensaje?: string; error?: string }> => {
-    const now = new Date();
-    const timeFormatted = `${String(now.getHours()).padStart(2, "0")}:${String(
-      now.getMinutes()
-    ).padStart(2, "0")}`;
-
-    const respuesta = await registrarSalidaEmpleado(
-      employee.id,
-      `${timeFormatted}:00`
-    );
-
-    if (!respuesta.ok) {
-      return respuesta;
-    }
-
-    const fresca = await fetchAsistencias();
-    setRecords(fresca.records || []);
-    setEmployees(fresca.employees || []);
-
-    return respuesta;
-  };
+  const handleRegisterCheckIn = (emp: Employee) => ejecutarMarcacion(registrarEntradaEmpleado, emp);
+  const handleRegisterCheckOut = (emp: Employee) => ejecutarMarcacion(registrarSalidaEmpleado, emp);
 
   return (
     <div className="w-full flex flex-col space-y-6">

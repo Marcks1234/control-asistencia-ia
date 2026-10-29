@@ -1,162 +1,163 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { querySupabase, resolverContextoEmpresa } from '@/lib/supabase';
+import { querySupabase, resolverContextoEmpresa, detectarInyeccionSQL, esUuidValido } from '@/lib/supabase';
 import { obtenerFechaHoyPeru } from '@/lib/utils';
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const cacheRespuestas = new Map<string, string>();
 
 export async function POST(req: NextRequest) {
   try {
-    const { mensaje, id_empresa: bodyEmpresaId } = await req.json();
-    if (!mensaje?.trim()) return NextResponse.json({ ok: false, error: 'Mensaje vacío.' }, { status: 400 });
+    const { mensaje, id_empresa: bodyEmpresaId } = (await req.json()) || {};
+    const consulta = String(mensaje || '').trim().slice(0, 500);
+    if (!consulta) return NextResponse.json({ ok: false, error: 'Mensaje vacío.' }, { status: 400 });
 
-    const { idEmpresa, nombreUsuario, idUsuario, empresaNombre } = resolverContextoEmpresa(req, bodyEmpresaId);
-    const consulta = String(mensaje).trim();
-    const consultaNorm = consulta.toLowerCase();
-    const fechaHoy = obtenerFechaHoyPeru();
-
-    const [empleados, asistencias] = await Promise.all([
-      querySupabase<any[]>(
-        `empleados?id_empresa=eq.${idEmpresa}&select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual,dni,departamentos(nombre)&activo=eq.true`
-      ),
-      querySupabase<any[]>(
-        `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id_empleado,fecha,hora_entrada,hora_salida,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`
-      ),
-    ]);
-
-    const listaEmpleados = Array.isArray(empleados) ? empleados : [];
-    const listaAsistencias = Array.isArray(asistencias) ? asistencias : [];
-
-    const mapa = new Map<string, any>();
-    for (const a of listaAsistencias) {
-      if (!mapa.has(a.id_empleado)) mapa.set(a.id_empleado, a);
+    // Protección activa contra SQL Injection
+    if (detectarInyeccionSQL(consulta)) {
+      return NextResponse.json({
+        ok: true,
+        interaccion: {
+          id: `sec-${Date.now()}`,
+          mensaje: consulta,
+          respuesta: 'Por motivos de seguridad, la consulta fue bloqueada al detectar patrones SQL. Como asistente de RRHH solo proceso preguntas en lenguaje natural sobre asistencia y colaboradores.',
+          metadata: {},
+          fecha: new Date().toISOString(),
+        },
+      });
     }
 
-    let presentes = 0;
-    let tardanzas = 0;
-    let ausentes = 0;
+    const { idEmpresa, nombreUsuario, idUsuario, empresaNombre } = resolverContextoEmpresa(req, bodyEmpresaId);
+    if (!esUuidValido(idEmpresa)) {
+      return NextResponse.json({
+        ok: true,
+        interaccion: {
+          id: `chat-${Date.now()}`,
+          mensaje: consulta,
+          respuesta: 'Por favor inicia sesión con tu cuenta empresarial para consultar la asistencia.',
+          metadata: {},
+          fecha: new Date().toISOString(),
+        },
+      });
+    }
 
-    const datosColaboradores = listaEmpleados.map((emp) => {
-      const asist = mapa.get(emp.id);
+    const fechaHoy = obtenerFechaHoyPeru();
+    const [empleados, asistencias, horarios] = await Promise.all([
+      querySupabase<any[]>(`empleados?id_empresa=eq.${idEmpresa}&select=id,nombre,apellido,codigo_biometrico,cargo,punto_acceso_habitual,dni,departamentos(nombre),horarios(descripcion,hora_entrada,hora_salida)&activo=eq.true`),
+      querySupabase<any[]>(`asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id_empleado,hora_entrada,hora_salida,minutos_tardanza,estado,punto_acceso,confianza_ia,observacion&order=created_at.desc`),
+      querySupabase<any[]>(`horarios?id_empresa=eq.${idEmpresa}&select=id,descripcion,hora_entrada,hora_salida,tolerancia_minutos&activo=eq.true&order=created_at.asc`),
+    ]);
+
+    const mapaAsist = new Map<string, any>((asistencias || []).map((a) => [a.id_empleado, a]));
+    let [presentes, tardanzas, ausentes] = [0, 0, 0];
+
+    const colaboradores = (empleados || []).map((emp) => {
+      const asist = mapaAsist.get(emp.id);
       const estado = asist?.estado ? String(asist.estado).toUpperCase() : 'FALTA';
       if (estado === 'FALTA') ausentes++;
       else if (estado === 'TARDANZA') tardanzas++;
       else presentes++;
+
+      const turnoDesc = emp.horarios ? `${emp.horarios.descripcion} (${emp.horarios.hora_entrada.slice(0, 5)} - ${emp.horarios.hora_salida.slice(0, 5)})` : 'Turno General (08:00 - 17:00)';
 
       return {
         id: emp.id,
         nombre: `${emp.nombre} ${emp.apellido}`.trim(),
         dni: emp.dni,
         cargo: emp.cargo || 'Colaborador',
-        departamento: emp.departamentos?.nombre || 'Operaciones',
+        departamento: emp.departamentos?.nombre || 'General',
+        turno: turnoDesc,
         codigo_biometrico: emp.codigo_biometrico || 'BIO-0000',
         estado,
         hora_entrada: asist?.hora_entrada ? asist.hora_entrada.slice(0, 5) : 'Sin registro',
-        hora_salida: asist?.hora_salida ? asist.hora_salida.slice(0, 5) : 'En curso',
         minutos_tardanza: asist?.minutos_tardanza || 0,
-        punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Torniquete Central',
+        punto_acceso: asist?.punto_acceso || emp.punto_acceso_habitual || 'Acceso Principal',
         confianza_ia: asist?.confianza_ia ? Number(asist.confianza_ia) : 98.4,
-        motivo: asist?.observacion || 'Sin observaciones',
+        motivo: asist?.observacion || (estado === 'FALTA' ? 'Inasistencia sin justificar' : 'Puntual'),
       };
     });
 
-    const empleadoTardanza =
-      datosColaboradores.find((c) => c.estado === 'TARDANZA') ||
-      datosColaboradores.find((c) => c.minutos_tardanza > 0) ||
-      datosColaboradores[0];
+    const ausentesList = colaboradores.filter((c) => c.estado === 'FALTA');
+    const tardanzasList = colaboradores.filter((c) => c.estado === 'TARDANZA' || c.minutos_tardanza > 0);
+    const qNorm = consulta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    let respuestaTexto = '';
-    let metadata: any = {};
-    const claveCache = `${idEmpresa}|${consultaNorm}|${presentes}-${tardanzas}-${ausentes}`;
+    const empEspecifico = colaboradores.filter((c) =>
+      c.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(' ').some((p) => p.length > 2 && qNorm.includes(p))
+    );
 
-    if (consultaNorm === '¿quién llegó tarde hoy y cuál es el motivo?' || consultaNorm === '¿quién llegó tarde hoy?') {
-      if (empleadoTardanza?.estado === 'TARDANZA') {
-        respuestaTexto = `Hoy (${fechaHoy}) en ${empresaNombre} se registra ${tardanzas} tardanza: ${empleadoTardanza.nombre} (${empleadoTardanza.codigo_biometrico}) del área de ${empleadoTardanza.departamento}, quien ingresó a las ${empleadoTardanza.hora_entrada} (+${empleadoTardanza.minutos_tardanza} min). Motivo: ${empleadoTardanza.motivo}.`;
-      } else {
-        respuestaTexto = `Hoy (${fechaHoy}) en ${empresaNombre} no se registran tardanzas (${presentes} presentes y ${ausentes} ausentes).`;
-      }
-    } else if (consultaNorm === 'ver reporte de operaciones') {
-      const opList = datosColaboradores.filter((c) => c.departamento.toLowerCase().includes('operaciones'));
-      const det = opList.map((c) => `${c.nombre}: ${c.estado} (${c.hora_entrada})`).join(' | ');
-      respuestaTexto = `Reporte de Operaciones (${opList.length} colaboradores): ${det || 'Sin registros'}.`;
-    } else if (consultaNorm === 'generar resumen del día') {
-      const det = datosColaboradores.map((c) => `${c.nombre}: ${c.estado}`).join(', ');
-      respuestaTexto = `Resumen de hoy ${fechaHoy} (${datosColaboradores.length} colaboradores): ${presentes} presentes, ${tardanzas} tardanza y ${ausentes} ausentes. Detalle: ${det}.`;
-    } else if (cacheRespuestas.has(claveCache)) {
-      respuestaTexto = cacheRespuestas.get(claveCache)!;
-    } else if (OPENAI_API_KEY?.startsWith('sk-')) {
+    let texto = '';
+    let tarjetas: typeof colaboradores = [];
+
+    // Respuestas conversacionales limpias y naturales
+    if (/^(hola|buenos|buenas|que tal|saludos)/.test(qNorm)) {
+      texto = `¡Hola! Hoy en ${empresaNombre || 'la empresa'} tenemos ${colaboradores.length} colaboradores: ${presentes} presentes, ${tardanzas} tardanzas y ${ausentes} ausentes. ¿En qué te puedo ayudar?`;
+    } else if (/\b(gracias|excelente|perfecto|listo)\b/.test(qNorm)) {
+      texto = '¡Con mucho gusto! Aquí estaré si necesitas consultar o justificar asistencias.';
+    } else if (/\b(falto|falta|faltaron|ausente|no vino)\b/.test(qNorm)) {
+      tarjetas = ausentesList;
+      texto = ausentesList.length
+        ? `Hoy se registran ${ausentesList.length} inasistencias: ${ausentesList.map((a) => `${a.nombre} (${a.departamento})`).join(', ')}. Puedes justificarlas en las siguientes tarjetas:`
+        : `Hoy no se registran inasistencias. Todo el personal asistió a su turno.`;
+    } else if (/\b(tarde|tardanza|retraso)\b/.test(qNorm)) {
+      tarjetas = tardanzasList;
+      texto = tardanzasList.length
+        ? `Hoy se registran ${tardanzasList.length} tardanzas: ${tardanzasList.map((t) => `${t.nombre} (+${t.minutos_tardanza} min)`).join(', ')}.`
+        : `Hoy ningún colaborador registra tardanzas (${presentes} presentes).`;
+    } else if (/\b(turno|turnos|horario|horarios)\b/.test(qNorm)) {
+      texto = (horarios || []).length
+        ? `Turnos configurados:\n${horarios?.map((h) => `• ${h.descripcion}: ${h.hora_entrada.slice(0, 5)} - ${h.hora_salida.slice(0, 5)} (tol. ${h.tolerancia_minutos ?? 10}m)`).join('\n')}`
+        : 'No hay turnos registrados aún. Puedes configurarlos en Pruebas / Personal.';
+    } else if (/\b(empleados|colaboradores|personal|quienes trabajan)\b/.test(qNorm)) {
+      texto = colaboradores.length
+        ? `Personal activo (${colaboradores.length}):\n${colaboradores.map((c) => `• ${c.nombre} (${c.cargo} - ${c.departamento}) - Estado: ${c.estado}`).join('\n')}`
+        : 'No hay empleados registrados actualmente.';
+    } else if (empEspecifico.length > 0) {
+      tarjetas = empEspecifico;
+      texto = empEspecifico.map((c) => `${c.nombre} (${c.departamento}): Estado ${c.estado}, Entrada: ${c.hora_entrada}, Turno: ${c.turno}.`).join('\n');
+    } else if (OPENAI_KEY.startsWith('sk-')) {
       try {
-        const resumen = datosColaboradores
-          .map((c) => `${c.nombre}[${c.cargo},${c.departamento}]:${c.estado}(${c.hora_entrada},+${c.minutos_tardanza}m,${c.motivo})`)
-          .join('; ');
-
-        const systemPrompt = `Asistente RRHH para "${empresaNombre}". Usuario: "${nombreUsuario}". Responde breve en español (máx 3 oraciones) usando solo estos datos reales: Total colaboradores = ${datosColaboradores.length}, Presentes = ${presentes}, Tardanzas = ${tardanzas}, Ausentes = ${ausentes}. Personal: ${resumen || 'Ninguno'}. Si preguntan cuántos empleados hay, responde ${datosColaboradores.length}.`;
-
-        const openAiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        const resumenDatos = colaboradores.map((c) => `${c.nombre}[${c.cargo}]:${c.estado}(${c.hora_entrada})`).join(', ');
+        const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${OPENAI_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: OPENAI_MODEL,
-            messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: consulta }],
-            temperature: 0.2,
-            max_tokens: 160,
+            messages: [
+              { role: 'system', content: `Asistente RRHH para ${empresaNombre}. Responde cordial y breve (máx 3 oraciones). Datos: ${resumenDatos}.` },
+              { role: 'user', content: consulta },
+            ],
+            temperature: 0.3,
+            max_tokens: 180,
           }),
         });
-
-        if (openAiRes.ok) {
-          const aiJson = await openAiRes.json();
-          respuestaTexto = aiJson.choices?.[0]?.message?.content?.trim() || '';
-          if (respuestaTexto) cacheRespuestas.set(claveCache, respuestaTexto);
+        if (aiRes.ok) {
+          const aiJson = await aiRes.json();
+          texto = aiJson.choices?.[0]?.message?.content?.trim() || '';
         }
       } catch {}
     }
 
-    if (!respuestaTexto) {
-      respuestaTexto = `En ${empresaNombre}, hoy (${fechaHoy}) cuentas con ${datosColaboradores.length} colaboradores: ${presentes} presentes, ${tardanzas} con tardanza y ${ausentes} ausentes.`;
+    if (!texto) {
+      texto = `Hoy (${fechaHoy}) se registran ${colaboradores.length} colaboradores: ${presentes} presentes, ${tardanzas} con tardanza y ${ausentes} ausentes.`;
     }
 
-    if (
-      empleadoTardanza &&
-      (consultaNorm.includes('tarde') || consultaNorm.includes('tardanza') || consultaNorm.includes(empleadoTardanza.nombre.toLowerCase().split(' ')[0]))
-    ) {
-      metadata = {
-        tipo: 'TARJETA_TARDANZA',
-        empleado: {
-          id: empleadoTardanza.id,
-          iniciales: empleadoTardanza.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-          nombre: empleadoTardanza.nombre,
-          dni: empleadoTardanza.dni,
-          cargo: empleadoTardanza.cargo,
-          codigo_biometrico: empleadoTardanza.codigo_biometrico,
-          departamento: empleadoTardanza.departamento,
-          turno: 'Turno Mañana (08:00 AM)',
-          minutos_tardanza: empleadoTardanza.minutos_tardanza,
-          hora_entrada: `${empleadoTardanza.hora_entrada} AM`,
-          punto_acceso: empleadoTardanza.punto_acceso,
-          confianza_ia: empleadoTardanza.confianza_ia,
-          motivo: empleadoTardanza.motivo,
-          estado: empleadoTardanza.estado,
-        },
-      };
-    }
+    const metadata: any = tarjetas.length ? {
+      tipo: 'TARJETA_TARDANZA',
+      empleado: tarjetas[0],
+      empleados: tarjetas.map((c) => ({
+        ...c,
+        iniciales: c.nombre.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || 'EM',
+      })),
+    } : {};
 
     if (idEmpresa) {
       querySupabase('historial_chat', {
         method: 'POST',
-        body: JSON.stringify({ id_empresa: idEmpresa, id_usuario: idUsuario || null, mensaje: consulta, respuesta: respuestaTexto, metadata, fecha: new Date().toISOString() }),
+        body: JSON.stringify({ id_empresa: idEmpresa, id_usuario: idUsuario || null, mensaje: consulta, respuesta: texto, metadata, fecha: new Date().toISOString() }),
       }).catch(() => {});
     }
 
     return NextResponse.json({
       ok: true,
-      interaccion: {
-        id: `chat-${Date.now()}`,
-        mensaje: consulta,
-        respuesta: respuestaTexto,
-        metadata,
-        fecha: new Date().toISOString(),
-      },
+      interaccion: { id: `chat-${Date.now()}`, mensaje: consulta, respuesta: texto, metadata, fecha: new Date().toISOString() },
     });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

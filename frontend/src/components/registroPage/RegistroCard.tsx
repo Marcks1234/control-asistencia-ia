@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PasswordInput from "@/components/ui/PasswordInput";
-import { Plan } from "@/types/models";
+import { Plan } from "@/models";
 
 const PLANES_INICIALES: Plan[] = [
   { id: "77975779-0878-44c1-8144-b437b399d8da", nombre: "Básico", precio_mensual: 20, limite_empleados: 50, limite_camaras: 4, caracteristicas: [] },
@@ -99,10 +99,10 @@ export default function RegistroCard() {
             Digitaliza el control de asistencia de tu empresa
           </h2>
           <p className="text-xs text-gray-300 mt-4 leading-relaxed">
-            Regístrate en menos de 2 minutos y obtén acceso al control biométrico facial con IA, reportes en tiempo real y asistente inteligente.
+            Regístrate en menos de 2 minutos y obtén acceso al control de asistencia, reportes en tiempo real y asistente para tu empresa.
           </p>
           <ul className="mt-8 space-y-3.5 text-xs text-gray-200">
-            {["Prueba gratuita sin tarjeta de crédito", "Detección de tardanzas automática con tolerancia", "Asistente IA integrado conectado a Supabase"].map((item, idx) => (
+            {["Prueba gratuita sin tarjeta de crédito", "Detección de tardanzas automática con tolerancia", "Asistente de consultas integrado"].map((item, idx) => (
               <li key={idx} className="flex items-center gap-2.5">
                 <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">✓</span>
                 {item}

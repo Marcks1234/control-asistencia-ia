@@ -61,9 +61,7 @@ export default function DailyAttendanceCard({
       {/* 1. Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-[#2563EB]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-          </svg>
+          <img src="/imgs/icons/clock.svg" alt="" className="w-4 h-4" />
           <h2 className="text-sm md:text-base font-bold text-gray-900">Registro del Día (Supabase)</h2>
           {loading && <span className="text-[11px] text-blue-600 animate-pulse font-medium">Sincronizando...</span>}
         </div>
@@ -91,9 +89,7 @@ export default function DailyAttendanceCard({
       {/* 3. Search Bar */}
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          <img src="/imgs/icons/search.svg" alt="" className="w-4 h-4" />
         </div>
         <input
           type="text"
@@ -123,9 +119,7 @@ export default function DailyAttendanceCard({
               <tr>
                 <td colSpan={7} className="text-center py-10 text-gray-400">
                   <div className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin text-blue-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
-                    </svg>
+                    <img src="/imgs/icons/spinner.svg" alt="" className="w-4 h-4 animate-spin" />
                     <span>Cargando datos desde Supabase...</span>
                   </div>
                 </td>

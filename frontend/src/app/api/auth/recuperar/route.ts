@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { querySupabase } from '@/lib/supabase';
-import { enviarSmtpGmail } from '@/lib/utils';
+import { enviarSmtpGmail } from '@/lib/smtp';
 
 export async function POST(req: NextRequest) {
   try {

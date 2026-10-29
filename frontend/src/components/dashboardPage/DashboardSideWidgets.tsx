@@ -34,9 +34,7 @@ export default function DashboardSideWidgets({
         </h3>
 
         <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
+          <img src="/imgs/icons/clock.svg" alt="" className="w-3.5 h-3.5" />
           08:00 AM — 05:00 PM · {totalEmpleados} colaboradores asignados
         </p>
 
@@ -77,21 +75,15 @@ export default function DashboardSideWidgets({
       {/* Acceso Rápido a Otros Módulos */}
       <div className="bg-gradient-to-br from-[#273656] to-[#1a253b] text-white rounded-2xl p-5 shadow-xs">
         <div className="flex items-center gap-2 text-amber-400 text-xs font-bold tracking-wide uppercase">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"
-            />
-          </svg>
+          <img src="/imgs/icons/sparkle.svg" alt="" className="w-3.5 h-3.5" />
           Gestión Inteligente
         </div>
 
         <h4 className="mt-2 text-sm font-bold">
-          ¿Deseas marcar una asistencia o consultar a la IA?
+          ¿Deseas registrar una marcación o hacer una consulta?
         </h4>
         <p className="mt-1 text-xs text-slate-300">
-          Puedes registrar ingresos manuales o pedir reportes instantáneos con lenguaje natural.
+          Registra ingresos manuales o consulta reportes de asistencia al instante.
         </p>
 
         <div className="mt-4 flex flex-col gap-2">
@@ -100,19 +92,15 @@ export default function DashboardSideWidgets({
             className="inline-flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold transition cursor-pointer"
           >
             <span>Ir a Entradas / Salidas</span>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" />
-            </svg>
+            <img src="/imgs/icons/arrow-up-right.svg" alt="" className="w-3.5 h-3.5" />
           </Link>
 
           <Link
             href="/asistente-ia"
             className="inline-flex items-center justify-between px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold transition cursor-pointer"
           >
-            <span>Abrir Asistente IA</span>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" />
-            </svg>
+            <span>Abrir Asistente</span>
+            <img src="/imgs/icons/arrow-up-right.svg" alt="" className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>

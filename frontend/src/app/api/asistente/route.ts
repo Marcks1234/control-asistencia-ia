@@ -27,8 +27,12 @@ export async function GET(req: NextRequest) {
     let ausentes = 0;
 
     const mapa = new Map<string, any>();
+    const mapaEstados = new Map<string, string>();
     for (const a of listaAsistencias) {
       if (!mapa.has(a.id_empleado)) mapa.set(a.id_empleado, a);
+      if (a.id_empleado && a.estado) {
+        mapaEstados.set(a.id_empleado, String(a.estado).toUpperCase());
+      }
     }
 
     for (const emp of listaEmpleados) {
@@ -42,6 +46,28 @@ export async function GET(req: NextRequest) {
     const total = listaEmpleados.length;
     const puntualidad = total > 0 ? Math.round((presentes / total) * 100) : 100;
 
+    // Sincronizar el estado en vivo de las tarjetas del historial con la base de datos
+    const historialSincronizado = (Array.isArray(historial) ? historial : []).map((item) => {
+      if (!item.metadata) return item;
+      const meta = { ...item.metadata };
+
+      if (meta.empleado && mapaEstados.has(meta.empleado.id)) {
+        meta.empleado = {
+          ...meta.empleado,
+          estado: mapaEstados.get(meta.empleado.id)!,
+        };
+      }
+
+      if (Array.isArray(meta.empleados)) {
+        meta.empleados = meta.empleados.map((emp: any) => ({
+          ...emp,
+          estado: mapaEstados.get(emp.id) || emp.estado,
+        }));
+      }
+
+      return { ...item, metadata: meta };
+    });
+
     return NextResponse.json({
       ok: true,
       resumen: {
@@ -51,7 +77,7 @@ export async function GET(req: NextRequest) {
         total_plantilla: total,
         puntualidad_semanal: `${puntualidad}%`,
       },
-      historial: Array.isArray(historial) ? historial : [],
+      historial: historialSincronizado,
     });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
