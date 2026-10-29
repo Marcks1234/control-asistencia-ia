@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useSyncExternalStore } from "react";
-import Link from "next/link";
 import { fetchAsistencias } from "@/services/asistenciaService";
 import "./reports.css";
+import AppLayout from "@/components/layout/AppLayout";
 
 // src/types/reports.ts
 type ReportType = "payroll" | "attendance" | "biometric";
@@ -402,122 +402,6 @@ function DesignIcon({ id }: { id: string }) {
     <svg width={width} height={height} aria-hidden="true" className="shrink-0">
       <use href={`/imgs/reportes-icons.svg#icon-${id.replace(":", "-")}`} />
     </svg>
-  );
-}
-
-// src/components/dashboard/DashboardSidebar.tsx
-const navigation = [
-  { title: "Dashboard", icon: "3534:810", href: "/dashboard" },
-  { title: "Personal", icon: "3534:774", href: "/agregado-prueba" },
-  { title: "Cámaras IA", icon: "3534:828" },
-  { title: "Entradas / Salidas", icon: "3534:792", href: "/entradas-salidas" },
-  { title: "Reportes", icon: "3534:756", href: "/reportes" },
-  { title: "Asistente IA", icon: "3594:194", href: "/asistente-ia" },
-];
-function DashboardSidebar() {
-  return (
-    <aside className="reports-sidebar">
-      <div>
-        <Link
-          href="/dashboard"
-          className="reports-brand"
-          aria-label="AsistenciaAI, ir al panel de control"
-        >
-          <span className="reports-logo">
-            <DesignIcon id="3503:5785" />
-          </span>
-          <span>
-            <strong>AsistenciaAI</strong>
-            <small>CONTROL &amp; ASISTENCIA</small>
-          </span>
-        </Link>
-        <p className="reports-nav-title">NAVEGACIÓN PRINCIPAL</p>
-        <nav aria-label="Navegación principal" className="reports-nav">
-          {navigation.map((item) =>
-            item.href ? (
-              <Link
-                key={item.title}
-                href={item.href}
-                aria-current={item.href === "/reportes" ? "page" : undefined}
-                className={item.href === "/reportes" ? "active" : ""}
-              >
-                <DesignIcon id={item.icon} />
-                {item.title}
-              </Link>
-            ) : (
-              <button
-                key={item.title}
-                disabled
-                title="Módulo pendiente de desarrollar"
-              >
-                <DesignIcon id={item.icon} />
-                {item.title}
-              </button>
-            ),
-          )}
-        </nav>
-      </div>
-      <div className="reports-sidebar-bottom">
-        <button disabled title="Próximamente">
-          <DesignIcon id="3503:5824" />
-          Alertas
-        </button>
-        <button disabled title="Próximamente">
-          <DesignIcon id="3503:5831" />
-          Configuración
-        </button>
-        <div className="reports-profile">
-          <span className="reports-avatar">AD</span>
-          <span>
-            <strong>Administrador</strong>
-            <small>Recursos Humanos</small>
-          </span>
-          <Link href="/dashboard" aria-label="Volver al panel principal">
-            <DesignIcon id="3503:5845" />
-          </Link>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-// src/components/dashboard/DashboardHeader.tsx
-interface DashboardHeaderProps {
-  dateLabel: string;
-  search: string;
-  onSearch: (value: string) => void;
-}
-function DashboardHeader({
-  dateLabel,
-  search,
-  onSearch,
-}: DashboardHeaderProps) {
-  return (
-    <header className="reports-topbar">
-      <span className="reports-date">
-        <DesignIcon id="3521:8626" />
-        {dateLabel}
-      </span>
-      <div className="reports-top-actions">
-        <label className="reports-search">
-          <DesignIcon id="3521:8635" />
-          <input
-            type="search"
-            aria-label="Buscar colaborador, código o departamento"
-            placeholder="Buscar empleado, código o departamento..."
-            value={search}
-            onChange={(event) => onSearch(event.target.value)}
-          />
-        </label>
-        <Link
-          href="/asistente-ia"
-          className="reports-ai"
-        >
-          <DesignIcon id="3521:8637" />
-          Asistente AI
-        </Link>
-      </div>
-    </header>
   );
 }
 
@@ -959,16 +843,9 @@ function ReportsPage({
     }
   }
   return (
-    <div className="reports-shell">
-      <div className="reports-screen">
-        <DashboardSidebar />
-        <div className="reports-workspace">
-          <DashboardHeader
-            dateLabel={dateLabel}
-            search={filters.search}
-            onSearch={(search) => updateFilters({ search })}
-          />
-          <main className="reports-main">
+    <AppLayout activeItem="reportes">
+      <div className="reports-content">
+          <div className="reports-main">
             <div className="reports-page-header">
               <div>
                 <h1>Reportes y Exportación</h1>
@@ -1012,8 +889,7 @@ function ReportsPage({
                 setPage(1);
               }}
             />
-          </main>
-        </div>
+          </div>
       </div>
       <section className="reports-print" aria-hidden="true">
         <h1>{definition.title}</h1>
@@ -1044,7 +920,7 @@ function ReportsPage({
           </tbody>
         </table>
       </section>
-    </div>
+    </AppLayout>
   );
 }
 
