@@ -34,6 +34,15 @@ El objetivo es reducir el tiempo dedicado al procesamiento manual de asistencias
 - **Reportes:** generación de reportes en PDF para nómina y auditorías.
 - **Asistente inteligente contextual:** chat integrado (RAG + API de OpenAI) que responde consultas directas sobre la base de datos ("¿Cuántos llegaron tarde hoy?") y consultas semánticas o abstractas ("¿Alguna incidencia o anomalía para revisar?").
 
+## 🚀 Módulos y Pantallas Implementadas
+
+- **Página de Inicio / Landing Page (`/`):** Presentación del producto, características destacadas del control con IA, catálogo de planes comerciales y sección de acceso administrativo.
+- **Dashboard Principal (`/dashboard`):** Panel de control analítico con indicadores en tiempo real (presentes hoy, tardanzas, inasistencias), métricas de puntualidad semanal, registro de actividades recientes y exportación de asistencias a formato CSV.
+- **Control de Entrada y Salida (`/entradas-salidas`):** Módulo de registro manual de asistencia con reloj digital en vivo, selector de colaboradores, verificación de turnos y tabla dinámica con filtros de estado (*Presentes, Ausentes, Tardanzas, Permisos*).
+- **Asistente Inteligente IA (`/asistente-ia`):** Interfaz conversacional contextual potenciada con IA para consultas ágiles sobre asistencias, incidencias y gestión de justificaciones de tardanza.
+- **Registro de Empresas (`/registro`):** Flujo de incorporación para nuevas organizaciones y administradores.
+- **Recuperación de Contraseña (`/recuperar-contrasena`):** Flujo de seguridad para la solicitud de restablecimiento de contraseña vía token seguro.
+
 ## 🧠 Enfoque de Inteligencia Artificial
 
 El asistente conversacional combina dos vías de consulta:
@@ -99,8 +108,6 @@ El frontend está construido con Next.js (App Router), TypeScript y Tailwind CSS
 - **`eslint.config.mjs`** — Reglas de linting del proyecto.
 - **`tsconfig.json`** — Configuración de TypeScript.
 - **`package.json`** — Dependencias y scripts del proyecto.
-
-> Esta sección se irá ampliando a medida que se desarrollen los módulos (autenticación, dashboard, reportes, asistente conversacional, etc.).
 
 ## 🎨 Prototipo (Figma)
 

@@ -1,17 +1,17 @@
-
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans,Geist, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
+
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   variable: "--font-plus-jakarta",
-  display: 'swap'
-})
+  display: "swap",
+});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -23,19 +23,29 @@ export const metadata: Metadata = {
   description: "Sistema de gestión de asistencia con implementación de la IA",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
-      lang="es" className={`${plusJakartaSans.variable} h-full antialiased`}
+      lang="es"
+      suppressHydrationWarning
+      className={`${plusJakartaSans.variable} ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col"
         style={{
-          backgroundColor: 'rgba(238, 242, 248, 1)',
-          color: '#171717',
-          ['--background' as any]: '#ffffff',
-          ['--foreground' as any]: '#171717'
-        }}>
-        {children}</body>
+          backgroundColor: "rgba(238, 242, 248, 1)",
+          color: "#171717",
+          ["--background" as any]: "#ffffff",
+          ["--foreground" as any]: "#171717",
+        }}
+      >
+        {children}
+      </body>
     </html>
   );
 }
