@@ -15,13 +15,35 @@ import {
   TurnoOption,
 } from "@/services/empleadoService";
 
+export interface EmpleadoItemConFoto extends EmpleadoItem {
+  foto?: string | null;
+  foto_url?: string | null;
+}
+
 export function useGestionPersonal() {
-  const [empleados, setEmpleados] = useState<EmpleadoItem[]>([]);
+  const [empleados, setEmpleados] = useState<EmpleadoItemConFoto[]>([]);
   const [departamentos, setDepartamentos] = useState<DepartamentoOption[]>([]);
   const [turnos, setTurnos] = useState<TurnoOption[]>([]);
   const [cargando, setCargando] = useState(true);
 
-  const [empForm, setEmpForm] = useState({ nombre: "", apellido: "", dni: "", cargo: "", idDepto: "", idTurno: "" });
+  const [empForm, setEmpForm] = useState<{
+    nombre: string;
+    apellido: string;
+    dni: string;
+    cargo: string;
+    idDepto: string;
+    idTurno: string;
+    foto?: string | null;
+  }>({
+    nombre: "",
+    apellido: "",
+    dni: "",
+    cargo: "",
+    idDepto: "",
+    idTurno: "",
+    foto: null,
+  });
+
   const [turnoForm, setTurnoForm] = useState({ desc: "", entrada: "08:00", salida: "17:00", tol: "10" });
   const [deptoNombre, setDeptoNombre] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -31,7 +53,7 @@ export function useGestionPersonal() {
     setCargando(true);
     const data = await fetchEmpleadosPrueba();
     if (data.ok) {
-      setEmpleados(data.empleados);
+      setEmpleados(data.empleados as EmpleadoItemConFoto[]);
       setDepartamentos(data.departamentos);
       setTurnos(data.turnos);
       setEmpForm((prev) => ({
@@ -61,11 +83,12 @@ export function useGestionPersonal() {
       cargo: empForm.cargo.trim() || "Colaborador",
       id_departamento: empForm.idDepto || undefined,
       id_horario: empForm.idTurno || undefined,
-    });
+      ...(empForm.foto ? { foto: empForm.foto } : {}),
+    } as any);
     setGuardando(false);
     if (res.ok) {
       setMensaje({ tipo: "ok", texto: res.mensaje || "Empleado registrado." });
-      setEmpForm((p) => ({ ...p, nombre: "", apellido: "", dni: "", cargo: "" }));
+      setEmpForm((p) => ({ ...p, nombre: "", apellido: "", dni: "", cargo: "", foto: null }));
       cargarDatos();
     } else {
       setMensaje({ tipo: "err", texto: res.error || "Error al registrar." });
@@ -110,24 +133,39 @@ export function useGestionPersonal() {
   };
 
   const handleEliminarEmpleado = async (id: string, nombre: string) => {
-    if (!confirm(`¿Eliminar a ${nombre}?`)) return;
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar a ${nombre}?`)) return;
+    setGuardando(true);
     const res = await eliminarEmpleadoPrueba(id);
-    if (res.ok) cargarDatos();
-    else setMensaje({ tipo: "err", texto: res.error || "Error al eliminar." });
+    setGuardando(false);
+    if (res.ok) {
+      cargarDatos();
+    } else {
+      setMensaje({ tipo: "err", texto: res.error || "Error al eliminar." });
+    }
   };
 
   const handleEliminarTurno = async (id: string, desc: string) => {
-    if (!confirm(`¿Eliminar turno "${desc}"? Los empleados asignados quedarán sin turno.`)) return;
+    if (!window.confirm(`¿Eliminar turno "${desc}"? Los empleados asignados quedarán sin turno.`)) return;
+    setGuardando(true);
     const res = await eliminarTurnoPrueba(id);
-    if (res.ok) cargarDatos();
-    else setMensaje({ tipo: "err", texto: res.error || "Error al eliminar." });
+    setGuardando(false);
+    if (res.ok) {
+      cargarDatos();
+    } else {
+      setMensaje({ tipo: "err", texto: res.error || "Error al eliminar." });
+    }
   };
 
   const handleEliminarDepartamento = async (id: string, nombre: string) => {
-    if (!confirm(`¿Eliminar departamento "${nombre}"? Los empleados asignados quedarán sin departamento.`)) return;
+    if (!window.confirm(`¿Eliminar departamento "${nombre}"? Los empleados asignados quedarán sin departamento.`)) return;
+    setGuardando(true);
     const res = await eliminarDepartamentoPrueba(id);
-    if (res.ok) cargarDatos();
-    else setMensaje({ tipo: "err", texto: res.error || "Error al eliminar." });
+    setGuardando(false);
+    if (res.ok) {
+      cargarDatos();
+    } else {
+      setMensaje({ tipo: "err", texto: res.error || "Error al eliminar." });
+    }
   };
 
   const handleCambioTurno = async (idEmpleado: string, idHorario: string) => {
