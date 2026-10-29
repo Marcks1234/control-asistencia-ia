@@ -41,7 +41,7 @@ export default function LoginCard() {
         );
       }
 
-      router.push("/reportes");
+      router.push("/dashboard");
     } catch (err: unknown) {
       setErrorMensaje(
         err instanceof Error ? err.message : "Error al iniciar sesión."

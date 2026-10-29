@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { id: "entradas-salidas", label: "Entradas / Salidas", href: "/entradas-salidas", habilitado: true },
   { id: "asistente-ia", label: "Asistente", href: "/asistente-ia", habilitado: true },
   { id: "camaras-ia", label: "Cámaras", href: "/entradas-salidas", habilitado: false },
-  { id: "reportes", label: "Reportes", href: "/entradas-salidas", habilitado: false },
+  { id: "reportes", label: "Reportes", href: "/reportes", habilitado: true },
 ];
 
 export default function Sidebar({ activeItem }: SidebarProps) {

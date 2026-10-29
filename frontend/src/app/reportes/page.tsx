@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { fetchAsistencias } from "@/services/asistenciaService";
 import "./reports.css";
 
 // src/types/reports.ts
@@ -406,21 +407,21 @@ function DesignIcon({ id }: { id: string }) {
 
 // src/components/dashboard/DashboardSidebar.tsx
 const navigation = [
-  { title: "Dashboard", icon: "3534:810" },
-  { title: "Personal", icon: "3534:774" },
+  { title: "Dashboard", icon: "3534:810", href: "/dashboard" },
+  { title: "Personal", icon: "3534:774", href: "/agregado-prueba" },
   { title: "Cámaras IA", icon: "3534:828" },
-  { title: "Entradas / Salidas", icon: "3534:792" },
+  { title: "Entradas / Salidas", icon: "3534:792", href: "/entradas-salidas" },
   { title: "Reportes", icon: "3534:756", href: "/reportes" },
-  { title: "Asistente IA", icon: "3594:194" },
+  { title: "Asistente IA", icon: "3594:194", href: "/asistente-ia" },
 ];
 function DashboardSidebar() {
   return (
     <aside className="reports-sidebar">
       <div>
         <Link
-          href="/"
+          href="/dashboard"
           className="reports-brand"
-          aria-label="AsistenciaAI, ir a la página principal"
+          aria-label="AsistenciaAI, ir al panel de control"
         >
           <span className="reports-logo">
             <DesignIcon id="3503:5785" />
@@ -437,8 +438,8 @@ function DashboardSidebar() {
               <Link
                 key={item.title}
                 href={item.href}
-                aria-current="page"
-                className="active"
+                aria-current={item.href === "/reportes" ? "page" : undefined}
+                className={item.href === "/reportes" ? "active" : ""}
               >
                 <DesignIcon id={item.icon} />
                 {item.title}
@@ -457,11 +458,11 @@ function DashboardSidebar() {
         </nav>
       </div>
       <div className="reports-sidebar-bottom">
-        <button disabled title="Módulo pendiente de desarrollar">
+        <button disabled title="Próximamente">
           <DesignIcon id="3503:5824" />
           Alertas
         </button>
-        <button disabled title="Módulo pendiente de desarrollar">
+        <button disabled title="Próximamente">
           <DesignIcon id="3503:5831" />
           Configuración
         </button>
@@ -471,7 +472,7 @@ function DashboardSidebar() {
             <strong>Administrador</strong>
             <small>Recursos Humanos</small>
           </span>
-          <Link href="/" aria-label="Volver al inicio">
+          <Link href="/dashboard" aria-label="Volver al panel principal">
             <DesignIcon id="3503:5845" />
           </Link>
         </div>
@@ -508,14 +509,13 @@ function DashboardHeader({
             onChange={(event) => onSearch(event.target.value)}
           />
         </label>
-        <button
+        <Link
+          href="/asistente-ia"
           className="reports-ai"
-          disabled
-          title="Módulo pendiente de desarrollar"
         >
           <DesignIcon id="3521:8637" />
           Asistente AI
-        </button>
+        </Link>
       </div>
     </header>
   );
@@ -846,11 +846,85 @@ function ReportsPage({
   const [type, setType] = useState<ReportType>("payroll");
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
+  const [recordsData, setRecordsData] = useState<AttendanceRecord[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const data = await fetchAsistencias();
+        if (!isMounted) return;
+        if (data.records && data.records.length > 0) {
+          const mapped: AttendanceRecord[] = data.records.map((r) => {
+            const isPresent = r.status === "presente" || r.status === "tardanza";
+            let workedHours = 0;
+            if (r.hours) {
+              const match = r.hours.match(/(\d+)h/);
+              if (match) workedHours = parseInt(match[1], 10);
+            } else if (r.checkIn && r.checkOut && r.checkOut !== "En curso") {
+              workedHours = 8;
+            } else if (r.checkIn) {
+              workedHours = 4;
+            }
+
+            return {
+              id: r.id,
+              employeeId: r.employeeId,
+              employeeName: r.name,
+              department: r.department || "General",
+              date: localDate(today),
+              entry: r.checkIn && r.checkIn !== "En curso" ? r.checkIn : null,
+              exit: r.checkOut && r.checkOut !== "En curso" ? r.checkOut : null,
+              lateMinutes: r.status === "tardanza" ? 15 : 0,
+              workedHours,
+              expected: true,
+              camera: "Cámara 01",
+              confidence: isPresent ? 98.4 : null,
+              verification: isPresent
+                ? r.status === "tardanza"
+                  ? "Revisión"
+                  : "Validado"
+                : "Sin validación",
+            };
+          });
+          setRecordsData(mapped);
+        } else if (data.employees && data.employees.length > 0) {
+          const fallback: AttendanceRecord[] = data.employees.map((emp) => ({
+            id: `emp-${emp.id}`,
+            employeeId: emp.id,
+            employeeName: emp.name,
+            department: emp.department || "General",
+            date: localDate(today),
+            entry: emp.checkIn && emp.checkIn !== "En curso" ? emp.checkIn : null,
+            exit: emp.checkOut && emp.checkOut !== "En curso" ? emp.checkOut : null,
+            lateMinutes: emp.status === "tardanza" ? 15 : 0,
+            workedHours: emp.checkIn ? 8 : 0,
+            expected: true,
+            camera: "Cámara 01",
+            confidence: emp.checkIn ? 98.2 : null,
+            verification: (emp.status === "presente"
+              ? "Validado"
+              : emp.status === "tardanza"
+                ? "Revisión"
+                : "Sin validación") as "Validado" | "Revisión" | "Sin validación",
+          }));
+          setRecordsData(fallback);
+        }
+      } catch (err) {
+        console.error("[Reportes] Error al cargar asistencias:", err);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [today]);
+
   const definition = reportDefinitions.find((report) => report.id === type)!;
   const departments = [
-    ...new Set(attendanceRecords.map((record) => record.department)),
+    ...new Set(recordsData.map((record) => record.department)),
   ].sort();
-  const records = filterRecords(attendanceRecords, filters, today);
+  const records = filterRecords(recordsData, filters, today);
   const rows = buildReportRows(records, type);
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const visibleRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
