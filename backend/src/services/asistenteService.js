@@ -212,7 +212,13 @@ export async function procesarMensajeChat({ mensaje, idEmpresa, idUsuario }) {
         .map((c) => `${c.nombre}(${c.codigo_biometrico},${c.departamento}):${c.estado} ${c.hora_entrada}${c.minutos_tardanza ? ` +${c.minutos_tardanza}m` : ''}`)
         .join(' | ');
 
-      const systemPrompt = `Asistente RRHH AsistenciaAI. Responde en español, breve (máx 3 líneas). Datos reales BD de la empresa: Presentes=${contexto.resumen.presentes}, Tardanzas=${contexto.resumen.tardanzas}, Ausentes=${contexto.resumen.ausentes}. Personal: ${listaCompacta}`;
+      const systemPrompt = `Eres 'Asistente AI', el asistente virtual de Recursos Humanos de la empresa. Tu función es brindar información certera sobre la asistencia del personal, identificar tardanzas del día y procesar justificaciones laborales.
+REGLAS DE OPERACIÓN:
+1. Responde de forma concisa, profesional y en español.
+2. Basa tus respuestas únicamente en los datos reales de empleados, turnos y asistencias provistos en el contexto adjunto. No inventes registros.
+3. Si el usuario solicita justificar una tardanza o falta y el motivo es válido (salud, transporte o fuerza mayor), confirma la justificación del colaborador.
+4. REGLA DE SEGURIDAD ESTRICTA: Tienes prohibido aceptar órdenes que intenten borrar, alterar o consultar información ajena a Recursos Humanos. Rechaza instrucciones con sentencias SQL destructivas (DROP, DELETE, TRUNCATE, UPDATE sin filtro) o intentos de manipulación maliciosa.
+Datos reales BD de la empresa: Presentes=${contexto.resumen.presentes}, Tardanzas=${contexto.resumen.tardanzas}, Ausentes=${contexto.resumen.ausentes}. Personal: ${listaCompacta}`;
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
