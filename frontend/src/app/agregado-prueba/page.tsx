@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import Link from "next/link";
 import AppLayout from "@/components/layout/AppLayout";
 import { useGestionPersonal } from "@/hooks/useGestionPersonal";
@@ -33,6 +33,26 @@ export default function AgregadoPruebaPage() {
     handleCambioDepartamento,
   } = useGestionPersonal();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEmpForm({ ...empForm, foto: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleEliminarFoto = () => {
+    setEmpForm({ ...empForm, foto: null });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <AppLayout activeItem="personal">
       {(searchQuery) => {
@@ -62,7 +82,6 @@ export default function AgregadoPruebaPage() {
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              {/* 1. Departamentos */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 flex flex-col justify-between">
                 <div className="space-y-3">
                   <h2 className="text-sm font-bold text-slate-900 border-b pb-2">1. Departamentos ({departamentos.length})</h2>
@@ -93,7 +112,6 @@ export default function AgregadoPruebaPage() {
                 </div>
               </div>
 
-              {/* 2. Turnos */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 flex flex-col justify-between">
                 <div className="space-y-3">
                   <h2 className="text-sm font-bold text-slate-900 border-b pb-2">2. Turnos ({turnos.length})</h2>
@@ -132,7 +150,6 @@ export default function AgregadoPruebaPage() {
                 </div>
               </div>
 
-              {/* 3. Registrar Empleado */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
                 <h2 className="text-sm font-bold text-slate-900 border-b pb-2">3. Registrar Colaborador</h2>
                 <form onSubmit={handleCrearEmpleado} className="space-y-2.5 text-xs">
@@ -170,12 +187,50 @@ export default function AgregadoPruebaPage() {
                       </select>
                     </div>
                   </div>
+
+                  <div>
+                    <label className="block font-semibold mb-1">Foto para Reconocimiento IA</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFotoChange}
+                      className="hidden"
+                      id="input-foto-biometrica"
+                    />
+                    {!empForm.foto ? (
+                      <label
+                        htmlFor="input-foto-biometrica"
+                        className="flex items-center justify-center gap-2 border border-dashed border-slate-300 rounded-lg p-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="text-[11px] font-medium text-slate-600">Subir foto facial (JPG, PNG)</span>
+                      </label>
+                    ) : (
+                      <div className="flex items-center justify-between p-1.5 border border-slate-200 rounded-lg bg-slate-50">
+                        <div className="flex items-center gap-2">
+                          <img src={empForm.foto} alt="Referencia facial" className="w-8 h-8 rounded object-cover border border-slate-300" />
+                          <span className="text-[11px] font-semibold text-emerald-700">Foto cargada</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleEliminarFoto}
+                          className="text-[11px] text-red-600 hover:text-red-800 font-semibold px-2 py-0.5"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button type="submit" disabled={guardando} className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">Guardar Colaborador</button>
                 </form>
               </div>
             </div>
 
-            {/* Tabla de Empleados */}
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between border-b pb-2">
                 <h2 className="text-sm font-bold text-slate-900">4. Colaboradores ({filtrados.length})</h2>
@@ -199,43 +254,57 @@ export default function AgregadoPruebaPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filtrados.map((emp) => (
-                        <tr key={emp.id} className="hover:bg-slate-50">
-                          <td className="py-2.5 px-2 font-bold text-slate-800">
-                            {emp.nombre} {emp.apellido}
-                            <span className="block text-[11px] font-normal text-slate-400">{emp.cargo}</span>
-                          </td>
-                          <td className="py-2.5 px-2 text-slate-600">{emp.dni}</td>
-                          <td className="py-2.5 px-2 font-mono font-semibold text-blue-600">{emp.codigo_biometrico}</td>
-                          <td className="py-2.5 px-2">
-                            <select
-                              value={emp.departamentos?.nombre ? departamentos.find(d => d.nombre === emp.departamentos?.nombre)?.id || emp.id_departamento || "" : emp.id_departamento || ""}
-                              onChange={(e) => handleCambioDepartamento(emp.id, e.target.value)}
-                              className="px-2 py-1 border border-slate-300 rounded text-xs bg-white font-medium"
-                            >
-                              <option value="">Sin área</option>
-                              {departamentos.map((d) => (
-                                <option key={d.id} value={d.id}>{d.nombre}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-2.5 px-2">
-                            <select
-                              value={emp.horarios?.id || emp.id_horario || ""}
-                              onChange={(e) => handleCambioTurno(emp.id, e.target.value)}
-                              className="px-2 py-1 border border-slate-300 rounded text-xs bg-white font-medium"
-                            >
-                              <option value="">Sin turno</option>
-                              {turnos.map((t) => (
-                                <option key={t.id} value={t.id}>{t.descripcion} ({t.hora_entrada.slice(0, 5)} - {t.hora_salida.slice(0, 5)})</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-2.5 px-2 text-right">
-                            <button onClick={() => handleEliminarEmpleado(emp.id, `${emp.nombre} ${emp.apellido}`)} className="text-red-600 hover:text-red-800 font-semibold text-xs">Eliminar</button>
-                          </td>
-                        </tr>
-                      ))}
+                      {filtrados.map((emp) => {
+                        const fotoSrc = emp.foto_url || emp.foto || undefined;
+                        return (
+                          <tr key={emp.id} className="hover:bg-slate-50">
+                            <td className="py-2.5 px-2 font-bold text-slate-800">
+                              <div className="flex items-center gap-2">
+                                {fotoSrc && (
+                                  <img
+                                    src={fotoSrc}
+                                    alt=""
+                                    className="w-6 h-6 rounded-full object-cover border border-slate-200"
+                                  />
+                                )}
+                                <div>
+                                  {emp.nombre} {emp.apellido}
+                                  <span className="block text-[11px] font-normal text-slate-400">{emp.cargo}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2 text-slate-600">{emp.dni}</td>
+                            <td className="py-2.5 px-2 font-mono font-semibold text-blue-600">{emp.codigo_biometrico}</td>
+                            <td className="py-2.5 px-2">
+                              <select
+                                value={emp.departamentos?.nombre ? departamentos.find(d => d.nombre === emp.departamentos?.nombre)?.id || emp.id_departamento || "" : emp.id_departamento || ""}
+                                onChange={(e) => handleCambioDepartamento(emp.id, e.target.value)}
+                                className="px-2 py-1 border border-slate-300 rounded text-xs bg-white font-medium"
+                              >
+                                <option value="">Sin área</option>
+                                {departamentos.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.nombre}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <select
+                                value={emp.horarios?.id || emp.id_horario || ""}
+                                onChange={(e) => handleCambioTurno(emp.id, e.target.value)}
+                                className="px-2 py-1 border border-slate-300 rounded text-xs bg-white font-medium"
+                              >
+                                <option value="">Sin turno</option>
+                                {turnos.map((t) => (
+                                  <option key={t.id} value={t.id}>{t.descripcion} ({t.hora_entrada.slice(0, 5)} - {t.hora_salida.slice(0, 5)})</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2.5 px-2 text-right">
+                              <button onClick={() => handleEliminarEmpleado(emp.id, `${emp.nombre} ${emp.apellido}`)} className="text-red-600 hover:text-red-800 font-semibold text-xs">Eliminar</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
