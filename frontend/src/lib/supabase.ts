@@ -34,7 +34,11 @@ export async function querySupabase<T = any>(endpoint: string, options?: Request
       },
       cache: 'no-store',
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errTxt = await res.text().catch(() => '');
+      console.error(`[querySupabase error ${res.status}] /${endpoint}:`, errTxt);
+      return null;
+    }
     const contentType = res.headers.get('content-type');
     return contentType?.includes('application/json') ? ((await res.json()) as T) : (true as unknown as T);
   } catch {

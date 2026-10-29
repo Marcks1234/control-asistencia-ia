@@ -77,7 +77,7 @@ export default function RegistroCard() {
       }
 
       setExitoMensaje("Registro completado. Redirigiendo al panel...");
-      setTimeout(() => router.push("/entradas-salidas"), 1200);
+      setTimeout(() => router.push("/dashboard"), 1200);
     } catch (err: any) {
       setErrorMensaje(err.message || "No se pudo completar el registro.");
     } finally {

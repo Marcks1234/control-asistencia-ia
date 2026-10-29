@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const nuevaEmpresa = await querySupabase<any[]>('empresas', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ nombre: nombreEmpresa.trim(), ruc: rucNorm, telefono: telefono.trim(), ciudad: ciudad.trim() || 'Lima', pais: 'Perú', estado: 'ACTIVO' }),
+      body: JSON.stringify({ nombre: nombreEmpresa.trim(), ruc: rucNorm, telefono: telefono.trim(), ciudad: ciudad.trim() || 'Lima', activo: true }),
     });
 
     const empresa = Array.isArray(nuevaEmpresa) && nuevaEmpresa[0] ? nuevaEmpresa[0] : null;
@@ -41,14 +41,14 @@ export async function POST(req: NextRequest) {
 
     await querySupabase('configuraciones_empresa', {
       method: 'POST',
-      body: JSON.stringify({ id_empresa: empresa.id, tolerancia_tardanza_minutos: 10, umbral_confianza_ia: 85.0 }),
+      body: JSON.stringify({ id_empresa: empresa.id, tolerancia_global_minutos: 15, umbral_confianza_ia: 0.60, precision_minima_ia: 95.0 }),
     });
 
     if (planIdFinal) {
       const hoy = obtenerFechaHoyPeru();
       await querySupabase('suscripciones', {
         method: 'POST',
-        body: JSON.stringify({ id_empresa: empresa.id, id_plan: planIdFinal, estado: 'PRUEBA_GRATIS', fecha_inicio: hoy, fecha_fin: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10) }),
+        body: JSON.stringify({ id_empresa: empresa.id, id_plan: planIdFinal, estado: 'PRUEBA', fecha_inicio: hoy, fecha_fin: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10) }),
       });
     }
 
