@@ -19,8 +19,8 @@ export default function NavBar() {
 
             {/*botones iniciar*/}
             <div className="flex items-center gap-4">
-                <button className="text-gray-600 hover:text-gray-900 transition">Iniciar sesión</button>
-                <button className="btn-home-page-secundary">Empezar Gratis</button>
+                <Link href="/reportes" className="text-gray-600 hover:text-gray-900 transition active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Iniciar sesión</Link>
+                <Link href="/reportes" className="btn-home-page-secundary inline-flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">Empezar Gratis</Link>
             </div>
         </header>
 

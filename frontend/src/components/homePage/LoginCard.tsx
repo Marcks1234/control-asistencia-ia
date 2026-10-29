@@ -11,7 +11,8 @@ export default function LoginCard() {
         </h2>
         <p className="text-sm text-gray-400 mb-6">Inicia sesión para gestionar el acceso de tus sedes.</p>
         
-        <form action="" method="post" className="space-y-4">
+        {/* Acceso de demostración: no realiza autenticación ni envía credenciales. */}
+        <form action="/reportes" method="get" className="space-y-4">
           <div>
             <label className="text-xs font-bold text-gray-500">Correo Electrónico</label>
             <div className="py-2">
@@ -39,9 +40,10 @@ export default function LoginCard() {
           </div>
 
           {/* Botón Iniciar Sesión */}
-          <button className="w-full bg-primary text-white py-2.5 rounded-md font-bold text-sm mt-1 hover:opacity-95 transition shadow-sm">
+          <button type="submit" className="w-full bg-primary text-white py-2.5 rounded-md font-bold text-sm mt-1 hover:opacity-95 active:scale-98 transition shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
             Iniciar Sesión
           </button>
+          <p className="text-xs text-gray-500 text-center">Acceso de demostración. Puedes continuar sin ingresar tus datos.</p>
         </form>
 
         {/* Separador*/}

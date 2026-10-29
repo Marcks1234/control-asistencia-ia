@@ -806,3 +806,81 @@
     margin: 15mm;
   }
 }
+
+/* Interacciones: misma respuesta de hover y clic que la página principal. */
+.reports-shell :is(button, a) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reports-shell :is(.reports-card, .reports-periods button,
+  .reports-export-buttons button, .reports-pagination button,
+  .reports-empty button, .reports-brand, .reports-profile a,
+  .reports-nav a) {
+  transition: transform 180ms ease, background-color 180ms ease,
+    box-shadow 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.reports-search, .reports-filters select, .reports-custom-dates input {
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.reports-search:focus-within {
+  border-color: var(--report-blue);
+  box-shadow: 0 0 0 3px #0051d514;
+}
+
+.reports-shell :is(.reports-periods button, .reports-export-buttons button,
+  .reports-pagination button, .reports-empty button):not(:disabled):active {
+  transform: scale(0.97);
+}
+
+.reports-card:active {
+  transform: scale(0.99);
+}
+
+.reports-preview tbody tr {
+  transition: background-color 180ms ease;
+}
+
+@media (hover: hover) {
+  .reports-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px #0051d514;
+    border-color: #788dc6;
+  }
+  .reports-card:hover:active {
+    transform: translateY(-1px) scale(0.99);
+  }
+  .reports-card.selected:hover {
+    border-color: var(--report-blue);
+  }
+  .reports-periods button:not(.selected):hover,
+  .reports-pagination button:not(:disabled):hover,
+  .reports-empty button:hover {
+    background: #eff4ff;
+    color: var(--report-blue);
+  }
+  .reports-export-buttons button:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px #0f172a14;
+  }
+  .reports-brand:hover, .reports-profile a:hover {
+    transform: translateY(-2px);
+  }
+  .reports-nav a:hover {
+    background: #273656;
+  }
+  .reports-preview tbody tr:hover {
+    background: #f8f9ff;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reports-shell *, .reports-shell *::before, .reports-shell *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  .reports-shell :is(button, a):is(:hover, :active) {
+    transform: none !important;
+  }
+}
