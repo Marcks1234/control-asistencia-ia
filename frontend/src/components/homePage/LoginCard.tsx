@@ -15,13 +15,20 @@ export default function LoginCard() {
   const manejarLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrorMensaje(null);
+
+    const correoLimpio = correo.trim();
+    if (!correoLimpio || !password) {
+      setErrorMensaje("Por favor ingresa tu correo y contraseña.");
+      return;
+    }
+
     setCargando(true);
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correo, password }),
+        body: JSON.stringify({ correo: correoLimpio, password }),
       });
 
       const data = await res.json();

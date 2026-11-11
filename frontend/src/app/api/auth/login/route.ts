@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
       `usuarios?correo=eq.${encodeURIComponent(emailNorm)}&select=id,id_empresa,nombre,apellido,correo,contrasena_hash,rol,activo&limit=1`
     );
 
+    if (usuarios === null) {
+      return NextResponse.json({ ok: false, error: 'Error al conectar con la base de datos de usuarios.' }, { status: 500 });
+    }
+
     const usuario = Array.isArray(usuarios) && usuarios[0] ? usuarios[0] : null;
     if (!usuario) return NextResponse.json({ ok: false, error: 'No existe una cuenta con este correo.' }, { status: 401 });
     if (!usuario.activo) return NextResponse.json({ ok: false, error: 'Esta cuenta se encuentra inactiva.' }, { status: 403 });

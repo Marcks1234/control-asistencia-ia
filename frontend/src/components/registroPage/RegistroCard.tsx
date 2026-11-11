@@ -54,18 +54,30 @@ export default function RegistroCard() {
     setErrorMensaje(null);
     setExitoMensaje(null);
 
-    if (!form.nombreEmpresa.trim()) return setErrorMensaje("Ingresa el nombre de la empresa.");
-    if (!/^\d{11}$/.test(form.ruc.trim())) return setErrorMensaje("El RUC debe tener 11 dígitos numéricos.");
-    if (!form.nombreGerente.trim() || !form.apellidoGerente.trim()) return setErrorMensaje("Ingresa nombre y apellido del encargado.");
-    if (!form.correo.includes("@")) return setErrorMensaje("Ingresa un correo electrónico válido.");
-    if (form.password.length < 6) return setErrorMensaje("La contraseña debe tener al menos 6 caracteres.");
+    const formLimpio = {
+      ...form,
+      nombreEmpresa: form.nombreEmpresa.trim(),
+      ruc: form.ruc.trim(),
+      telefono: form.telefono.trim(),
+      ciudad: form.ciudad.trim() || "Lima",
+      nombreGerente: form.nombreGerente.trim(),
+      apellidoGerente: form.apellidoGerente.trim(),
+      correo: form.correo.trim().toLowerCase(),
+      password: form.password,
+    };
+
+    if (!formLimpio.nombreEmpresa) return setErrorMensaje("Ingresa el nombre de la empresa.");
+    if (!/^\d{11}$/.test(formLimpio.ruc)) return setErrorMensaje("El RUC debe tener 11 dígitos numéricos.");
+    if (!formLimpio.nombreGerente || !formLimpio.apellidoGerente) return setErrorMensaje("Ingresa nombre y apellido del encargado.");
+    if (!formLimpio.correo.includes("@")) return setErrorMensaje("Ingresa un correo electrónico válido.");
+    if (formLimpio.password.length < 6) return setErrorMensaje("La contraseña debe tener al menos 6 caracteres.");
 
     setCargando(true);
     try {
       const res = await fetch("/api/auth/registro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, idPlan: idPlanSeleccionado }),
+        body: JSON.stringify({ ...formLimpio, idPlan: idPlanSeleccionado }),
       });
 
       const data = await res.json();
