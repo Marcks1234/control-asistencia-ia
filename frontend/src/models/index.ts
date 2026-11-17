@@ -3,4 +3,6 @@ export * from './Usuario';
 export * from './Empleado';
 export * from './Asistencia';
 export * from './Plan';
+export * from './Camara';
+
 

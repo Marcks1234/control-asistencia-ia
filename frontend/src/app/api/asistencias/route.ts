@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, employeeId, time } = await req.json();
+    const { action, employeeId, time, metodo, punto_acceso, confianza_ia, id_camara } = await req.json();
     if (!employeeId) return NextResponse.json({ ok: false, error: 'employeeId requerido' }, { status: 400 });
 
     const idEmpresa = resolverIdEmpresa(req);
@@ -154,8 +154,10 @@ export async function POST(req: NextRequest) {
         horas_trabajadas: null,
         estado: evaluacion.estado,
         minutos_tardanza: evaluacion.minutosTardanza,
-        metodo: 'MANUAL',
-        punto_acceso: 'Control Manual / Web',
+        metodo: metodo || 'MANUAL',
+        punto_acceso: punto_acceso || 'Control Manual / Web',
+        confianza_ia: confianza_ia !== undefined && confianza_ia !== null ? Number(confianza_ia) : (metodo === 'BIOMETRIA_FACIAL' || metodo === 'BIOMETRICO_IA' ? 98.7 : null),
+        id_camara: id_camara || null,
         observacion: evaluacion.observacion,
       };
 
@@ -193,10 +195,19 @@ export async function POST(req: NextRequest) {
       }
 
       const { horasDecimal } = calcularHorasTrabajadas(asistenciaExistente.hora_entrada, horaActual);
+      const payloadOut: Record<string, any> = {
+        hora_salida: horaActual,
+        horas_trabajadas: horasDecimal,
+      };
+      if (metodo) payloadOut.metodo = metodo;
+      if (punto_acceso) payloadOut.punto_acceso = punto_acceso;
+      if (confianza_ia !== undefined && confianza_ia !== null) payloadOut.confianza_ia = Number(confianza_ia);
+      if (id_camara) payloadOut.id_camara = id_camara;
+
       const res = await querySupabase(`asistencias?id=eq.${asistenciaExistente.id}`, {
         method: 'PATCH',
         headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ hora_salida: horaActual, horas_trabajadas: horasDecimal }),
+        body: JSON.stringify(payloadOut),
       });
 
       return NextResponse.json({
