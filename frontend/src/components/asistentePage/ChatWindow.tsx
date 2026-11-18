@@ -8,6 +8,7 @@ import {
   limpiarHistorialAsistente,
 } from "@/services/asistenteService";
 import { useAuthUser } from "@/hooks/useAuthUser";
+import ModuleHeader from "@/components/ui/ModuleHeader";
 import ChatMessageBubble from "./ChatMessageBubble";
 
 interface ChatWindowProps {
@@ -28,7 +29,7 @@ function formatearHoraMensaje(isoDate?: string): string {
 
 const AiAvatarBadge = () => (
   <div className="w-9 h-9 rounded-xl bg-[#1D63ED] text-white flex items-center justify-center shrink-0 shadow-xs">
-    <img src="/imgs/icons/sparkle.svg" alt="" className="w-4 h-4" />
+    <span className="text-xs font-bold tracking-tight">AS</span>
   </div>
 );
 
@@ -116,19 +117,21 @@ export default function ChatWindow({ externalPrompt, onExternalPromptHandled }: 
   };
 
   return (
-    <div className="flex-1 flex flex-col w-full min-h-0 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-4 shrink-0">
-        <div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Asistente de Consultas</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Consultas de asistencia, puntualidad y colaboradores en tiempo real.</p>
-        </div>
-        <button
-          type="button"
-          onClick={manejarLimpiarChat}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs transition cursor-pointer"
-        >
-          <span>Limpiar chat</span>
-        </button>
+    <div className="flex-1 flex flex-col w-full min-h-0 overflow-hidden gap-4">
+      <div className="shrink-0">
+        <ModuleHeader
+          title="Asistente de Consultas"
+          subtitle="Consultas sobre asistencia, puntualidad y justificaciones del personal."
+          actions={
+            <button
+              type="button"
+              onClick={manejarLimpiarChat}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-slate-200/90 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-2xs transition cursor-pointer"
+            >
+              <span>Limpiar chat</span>
+            </button>
+          }
+        />
       </div>
 
       <div className="flex-1 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between overflow-hidden min-h-0">

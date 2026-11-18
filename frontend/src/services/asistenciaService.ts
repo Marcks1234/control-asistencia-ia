@@ -1,16 +1,12 @@
 import { AttendanceRecord, Employee } from '@/types/attendance';
-import { getClientAuth } from '@/lib/supabase';
+import { requestClientApi } from '@/lib/supabase';
 
 export async function fetchAsistencias(): Promise<{
   employees: Employee[];
   records: AttendanceRecord[];
 }> {
   try {
-    const { headers, idEmpresa } = getClientAuth();
-    const url = idEmpresa ? `/api/asistencias?id_empresa=${encodeURIComponent(idEmpresa)}` : '/api/asistencias';
-    const res = await fetch(url, { headers, cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const data = await requestClientApi('/api/asistencias');
     return {
       employees: data.employees || [],
       records: data.records || [],
@@ -20,36 +16,23 @@ export async function fetchAsistencias(): Promise<{
   }
 }
 
-export async function registrarEntradaEmpleado(
+async function marcarAsistencia(
+  action: 'check-in' | 'check-out',
   employeeId: string,
   time?: string
 ): Promise<{ ok: boolean; mensaje?: string; error?: string }> {
   try {
-    const { headers } = getClientAuth();
-    const res = await fetch('/api/asistencias', {
+    return await requestClientApi('/api/asistencias', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ action: 'check-in', employeeId, time }),
+      body: JSON.stringify({ action, employeeId, time }),
     });
-    return await res.json();
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Error de conexión' };
   }
 }
 
-export async function registrarSalidaEmpleado(
-  employeeId: string,
-  time?: string
-): Promise<{ ok: boolean; mensaje?: string; error?: string }> {
-  try {
-    const { headers } = getClientAuth();
-    const res = await fetch('/api/asistencias', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ action: 'check-out', employeeId, time }),
-    });
-    return await res.json();
-  } catch (err: any) {
-    return { ok: false, error: err?.message || 'Error de conexión' };
-  }
-}
+export const registrarEntradaEmpleado = (employeeId: string, time?: string) =>
+  marcarAsistencia('check-in', employeeId, time);
+
+export const registrarSalidaEmpleado = (employeeId: string, time?: string) =>
+  marcarAsistencia('check-out', employeeId, time);

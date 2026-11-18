@@ -36,7 +36,7 @@ export default function RootLayout({
     >
       <body
         suppressHydrationWarning
-        className="min-h-full flex flex-col"
+        className="min-h-full flex flex-col font-sans text-slate-900"
         style={{
           backgroundColor: "rgba(238, 242, 248, 1)",
           color: "#171717",

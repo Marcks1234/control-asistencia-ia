@@ -58,7 +58,7 @@ export default function TopBar({ searchQuery = "", onSearchChange, onQuickAsk }:
         onClick={handleAiButtonClick}
         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0B57D0] hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
       >
-        <span>Asistente AI</span>
+        <span>Asistente</span>
       </button>
     </header>
   );

@@ -97,3 +97,19 @@ export function getClientAuth(): { headers: Record<string, string>; idEmpresa?: 
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return { headers, idEmpresa };
 }
+
+export async function requestClientApi<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
+  const { headers, idEmpresa } = getClientAuth();
+  const hasEmpresaParam = endpoint.includes('id_empresa=');
+  const sep = endpoint.includes('?') ? '&' : '?';
+  const url = idEmpresa && !hasEmpresaParam
+    ? `${endpoint}${sep}id_empresa=${encodeURIComponent(idEmpresa)}`
+    : endpoint;
+
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...headers, ...(options?.headers || {}) },
+    cache: 'no-store',
+  });
+  return (await res.json()) as T;
+}

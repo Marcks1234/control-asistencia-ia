@@ -62,7 +62,7 @@ export default function DailyAttendanceCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img src="/imgs/icons/clock.svg" alt="" className="w-4 h-4" />
-          <h2 className="text-sm md:text-base font-bold text-gray-900">Registro del Día (Supabase)</h2>
+          <h2 className="text-sm md:text-base font-bold text-gray-900">Registro del Día</h2>
           {loading && <span className="text-[11px] text-blue-600 animate-pulse font-medium">Sincronizando...</span>}
         </div>
         <span className="text-xs text-gray-400 font-medium" suppressHydrationWarning>
