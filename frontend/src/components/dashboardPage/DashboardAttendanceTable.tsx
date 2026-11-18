@@ -35,8 +35,8 @@ export default function DashboardAttendanceTable({
     <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-5 border-b border-slate-100">
         <div>
-          <h2 className="text-base font-bold text-[#18243D]">Marcaciones de la Jornada</h2>
-          <p className="text-xs text-slate-400">Registros sincronizados con Supabase y el módulo de Entradas/Salidas</p>
+          <h2 className="text-base font-bold text-slate-900">Marcaciones de la Jornada</h2>
+          <p className="text-xs text-slate-500">Listado de ingresos y salidas registrados en la jornada</p>
         </div>
 
         <input
@@ -75,10 +75,7 @@ export default function DashboardAttendanceTable({
                         <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-bold text-xs flex items-center justify-center shrink-0">
                           {getInitials(item.name)}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-800">{item.name}</div>
-                          <div className="text-[11px] text-slate-400">ID: {item.employeeId.slice(0, 8)}...</div>
-                        </div>
+                        <div className="font-bold text-slate-800">{item.name}</div>
                       </div>
                     </td>
                     <td className="py-3.5 px-2">

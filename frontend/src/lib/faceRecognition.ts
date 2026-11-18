@@ -90,6 +90,38 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function dibujarImagenEnCanvas(
+  source: HTMLVideoElement | HTMLImageElement,
+  srcW: number,
+  srcH: number,
+  maxW: number
+): string {
+  const scale = srcW > maxW ? maxW / srcW : 1;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(srcW * scale);
+  canvas.height = Math.round(srcH * scale);
+  canvas.getContext('2d')?.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+/** Redimensiona un archivo o fotograma de video a máximo `maxW` px en formato JPEG 0.85. */
+export async function comprimirImagenFacial(
+  source: File | HTMLVideoElement,
+  maxW = 360
+): Promise<string> {
+  if (typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement) {
+    return dibujarImagenEnCanvas(source, source.videoWidth, source.videoHeight, maxW);
+  }
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(source as File);
+  });
+  const img = await loadImageElement(dataUrl);
+  return dibujarImagenEnCanvas(img, img.width, img.height, maxW);
+}
+
 export async function extractFaceDescriptor(
   input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | string
 ): Promise<number[] | null> {

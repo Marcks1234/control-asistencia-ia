@@ -3,36 +3,33 @@ import { querySupabase, resolverIdEmpresa, esUuidValido } from '@/lib/supabase';
 import { obtenerFechaHoyPeru } from '@/lib/utils';
 import { Camara, DeteccionBiometrica, parseCamaraStreamMeta } from '@/models/Camara';
 
+function mapCamara(c: any): Camara {
+  const meta = parseCamaraStreamMeta(c.stream_url);
+  return {
+    ...c,
+    tipo_fuente: meta.tipo_fuente,
+    device_id: meta.device_id,
+    modo_acceso: meta.modo_acceso,
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const idEmpresa = resolverIdEmpresa(req);
     const fechaHoy = obtenerFechaHoyPeru();
 
-    // 1. Obtener únicamente las cámaras reales registradas en la empresa
     let camaras: Camara[] = [];
-    if (esUuidValido(idEmpresa)) {
-      const camarasData = await querySupabase<any[]>(
-        `camaras?id_empresa=eq.${idEmpresa}&activo=eq.true&order=created_at.asc`
-      );
-      if (Array.isArray(camarasData)) {
-        camaras = camarasData.map((c) => {
-          const meta = parseCamaraStreamMeta(c.stream_url);
-          return {
-            ...c,
-            tipo_fuente: meta.tipo_fuente,
-            device_id: meta.device_id,
-            modo_acceso: meta.modo_acceso,
-          };
-        });
-      }
-    }
-
-    // 2. Obtener últimas marcaciones del día
     let detecciones: DeteccionBiometrica[] = [];
+
     if (esUuidValido(idEmpresa)) {
-      const asistData = await querySupabase<any[]>(
-        `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id,id_empleado,hora_entrada,hora_salida,minutos_tardanza,estado,metodo,punto_acceso,confianza_ia,observacion,created_at,empleados(id,nombre,apellido,cargo,foto_url,departamentos(nombre))&order=created_at.desc&limit=15`
-      );
+      const [camarasData, asistData] = await Promise.all([
+        querySupabase<any[]>(`camaras?id_empresa=eq.${idEmpresa}&activo=eq.true&order=created_at.asc`),
+        querySupabase<any[]>(
+          `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id,id_empleado,hora_entrada,hora_salida,minutos_tardanza,estado,metodo,punto_acceso,confianza_ia,observacion,created_at,empleados(id,nombre,apellido,cargo,foto_url,departamentos(nombre))&order=created_at.desc&limit=15`
+        ),
+      ]);
+
+      if (Array.isArray(camarasData)) camaras = camarasData.map(mapCamara);
 
       if (Array.isArray(asistData)) {
         detecciones = asistData
@@ -70,7 +67,7 @@ export async function GET(req: NextRequest) {
         estado: 'OPERATIVO',
         precisionGlobal: 98.6,
         tiempoRespuestaMs: 135,
-        algoritmo: 'face-api.js CNN (68 Landmarks · Descriptor 128D)',
+        algoritmo: 'Biometría Facial',
       },
     });
   } catch (error: any) {
@@ -85,14 +82,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Sesión o empresa no válida' }, { status: 401 });
     }
 
-    const {
-      nombre,
-      punto_acceso,
-      sede = 'Sede Central',
-      resolucion = '1080p 30fps',
-      stream_url = null,
-    } = await req.json();
-
+    const { nombre, punto_acceso, sede = 'Principal', resolucion = '1080p 30fps', stream_url = null } = await req.json();
     if (!nombre?.trim() || !punto_acceso?.trim()) {
       return NextResponse.json({ ok: false, error: 'Nombre y punto de acceso son obligatorios.' }, { status: 400 });
     }
@@ -117,16 +107,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'No se pudo guardar la cámara en Supabase.' }, { status: 400 });
     }
 
-    const meta = parseCamaraStreamMeta(creadaRaw.stream_url);
     return NextResponse.json({
       ok: true,
       mensaje: 'Cámara conectada exitosamente.',
-      camara: {
-        ...creadaRaw,
-        tipo_fuente: meta.tipo_fuente,
-        device_id: meta.device_id,
-        modo_acceso: meta.modo_acceso,
-      },
+      camara: mapCamara(creadaRaw),
     });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

@@ -3,15 +3,30 @@ import { querySupabase, resolverIdEmpresa } from '@/lib/supabase';
 import { obtenerFechaHoyPeru, obtenerHoraActualPeru, evaluarReglaEntrada, calcularHorasTrabajadas } from '@/lib/utils';
 import { Employee, AttendanceRecord, AttendanceStatus } from '@/types/attendance';
 
+async function guardarRegistroAsistencia(
+  existenteId: string | undefined,
+  payload: Record<string, any>,
+  insertContext?: { id_empresa: string; id_empleado: string; fecha: string }
+) {
+  const endpoint = existenteId ? `asistencias?id=eq.${existenteId}` : 'asistencias';
+  const method = existenteId ? 'PATCH' : 'POST';
+  const body = existenteId ? payload : { ...insertContext, ...payload };
+  const res = await querySupabase<any[]>(endpoint, {
+    method,
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify(body),
+  });
+  return Array.isArray(res) ? res[0] : res;
+}
+
 async function asegurarJornadaDeHoy(fechaHoy: string, idEmpresa: string, empleados: any[]) {
   const asistenciasHoy = await querySupabase<any[]>(
     `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id,id_empleado,fecha,hora_entrada,hora_salida,minutos_tardanza,horas_trabajadas,estado,metodo,punto_acceso,confianza_ia,observacion&order=created_at.desc`
   );
-
   if (Array.isArray(asistenciasHoy) && asistenciasHoy.length > 0) return asistenciasHoy;
   if (!Array.isArray(empleados) || empleados.length === 0) return [];
 
-  const nuevasFilas = empleados.map((emp) => ({
+  const filas = empleados.map((emp) => ({
     id_empresa: emp.id_empresa || idEmpresa,
     id_empleado: emp.id,
     fecha: fechaHoy,
@@ -26,12 +41,11 @@ async function asegurarJornadaDeHoy(fechaHoy: string, idEmpresa: string, emplead
     observacion: 'Pendiente de marcación',
   }));
 
-  const insertadas = await querySupabase('asistencias', {
+  const insertadas = await querySupabase<any[]>('asistencias', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify(nuevasFilas),
+    body: JSON.stringify(filas),
   });
-
   return Array.isArray(insertadas) ? insertadas : [];
 }
 
@@ -63,18 +77,20 @@ export async function GET(req: NextRequest) {
         est === 'TARDANZA' ? 'tardanza' :
         est === 'PERMISO' ? 'permiso' : 'ausente';
 
+      const name = `${emp.nombre} ${emp.apellido}`.trim();
+      const department = emp.departamentos?.nombre || 'Operaciones';
+      const shift = emp.horarios?.descripcion || 'Turno Mañana';
       const horaIni = emp.horarios?.hora_entrada?.slice(0, 5) || '08:00';
       const horaFin = emp.horarios?.hora_salida?.slice(0, 5) || '17:00';
       const checkIn = asist?.hora_entrada?.slice(0, 5) || null;
       const checkOut = asist?.hora_salida?.slice(0, 5) || (checkIn ? 'En curso' : null);
-      const horarioDesc = emp.horarios?.descripcion || 'Turno Mañana';
 
       employees.push({
         id: emp.id,
-        name: `${emp.nombre} ${emp.apellido}`.trim(),
-        department: emp.departamentos?.nombre || 'Operaciones',
+        name,
+        department,
         role: emp.cargo || 'Colaborador',
-        shift: horarioDesc,
+        shift,
         shiftSchedule: `${horaIni} - ${horaFin}`,
         startTime: horaIni,
         status: statusUi,
@@ -93,9 +109,9 @@ export async function GET(req: NextRequest) {
       records.push({
         id: asist?.id || `rec-${emp.id}`,
         employeeId: emp.id,
-        name: `${emp.nombre} ${emp.apellido}`.trim(),
-        department: emp.departamentos?.nombre || 'Operaciones',
-        shift: horarioDesc,
+        name,
+        department,
+        shift,
         shiftTime: horaIni,
         status: statusUi,
         checkIn,
@@ -127,93 +143,81 @@ export async function POST(req: NextRequest) {
     const empleado = Array.isArray(empData) && empData[0] ? empData[0] : null;
     if (!empleado) return NextResponse.json({ ok: false, error: 'Empleado no encontrado' }, { status: 404 });
 
-    const idEmpresaFinal = empleado.id_empresa || idEmpresa;
-
-    const asistHoy = await querySupabase<any[]>(
-      `asistencias?id_empleado=eq.${employeeId}&fecha=eq.${fechaHoy}&limit=1`
-    );
+    const nombreCompleto = `${empleado.nombre} ${empleado.apellido}`.trim();
+    const asistHoy = await querySupabase<any[]>(`asistencias?id_empleado=eq.${employeeId}&fecha=eq.${fechaHoy}&limit=1`);
     const asistenciaExistente = Array.isArray(asistHoy) && asistHoy[0] ? asistHoy[0] : null;
 
     if (action === 'check-in') {
       if (asistenciaExistente?.hora_entrada) {
         return NextResponse.json(
-          { ok: false, error: `${empleado.nombre} ${empleado.apellido} ya registró su entrada hoy a las ${asistenciaExistente.hora_entrada.slice(0, 5)}.` },
+          { ok: false, error: `${nombreCompleto} ya registró su entrada hoy a las ${asistenciaExistente.hora_entrada.slice(0, 5)}.` },
           { status: 400 }
         );
       }
 
       const horario = Array.isArray(empleado.horarios) ? empleado.horarios[0] : empleado.horarios;
-      const evaluacion = evaluarReglaEntrada(horario, horaActual, `${empleado.nombre} ${empleado.apellido}`);
+      const evaluacion = evaluarReglaEntrada(horario, horaActual, nombreCompleto);
       if (!evaluacion.permitida) {
         return NextResponse.json({ ok: false, error: evaluacion.error || 'Ingreso fuera de horario.' }, { status: 400 });
       }
 
-      const payload = {
-        hora_entrada: horaActual,
-        hora_salida: null,
-        horas_trabajadas: null,
-        estado: evaluacion.estado,
-        minutos_tardanza: evaluacion.minutosTardanza,
-        metodo: metodo || 'MANUAL',
-        punto_acceso: punto_acceso || 'Control Manual / Web',
-        confianza_ia: confianza_ia !== undefined && confianza_ia !== null ? Number(confianza_ia) : (metodo === 'BIOMETRIA_FACIAL' || metodo === 'BIOMETRICO_IA' ? 98.7 : null),
-        id_camara: id_camara || null,
-        observacion: evaluacion.observacion,
-      };
-
-      const res = asistenciaExistente
-        ? await querySupabase(`asistencias?id=eq.${asistenciaExistente.id}`, {
-            method: 'PATCH',
-            headers: { Prefer: 'return=representation' },
-            body: JSON.stringify(payload),
-          })
-        : await querySupabase(`asistencias`, {
-            method: 'POST',
-            headers: { Prefer: 'return=representation' },
-            body: JSON.stringify({ id_empresa: idEmpresaFinal, id_empleado: employeeId, fecha: fechaHoy, ...payload }),
-          });
+      const data = await guardarRegistroAsistencia(
+        asistenciaExistente?.id,
+        {
+          hora_entrada: horaActual,
+          hora_salida: null,
+          horas_trabajadas: null,
+          estado: evaluacion.estado,
+          minutos_tardanza: evaluacion.minutosTardanza,
+          metodo: metodo || 'MANUAL',
+          punto_acceso: punto_acceso || 'Control Manual / Web',
+          confianza_ia:
+            confianza_ia !== undefined && confianza_ia !== null
+              ? Number(confianza_ia)
+              : metodo === 'BIOMETRIA_FACIAL' || metodo === 'BIOMETRICO_IA'
+                ? 98.7
+                : null,
+          id_camara: id_camara || null,
+          observacion: evaluacion.observacion,
+        },
+        { id_empresa: empleado.id_empresa || idEmpresa, id_empleado: employeeId, fecha: fechaHoy }
+      );
 
       return NextResponse.json({
         ok: true,
-        mensaje: `Entrada de ${empleado.nombre} ${empleado.apellido} registrada hoy a las ${horaActual.slice(0, 5)}.`,
-        data: Array.isArray(res) ? res[0] : res,
+        mensaje: `Entrada de ${nombreCompleto} registrada hoy a las ${horaActual.slice(0, 5)}.`,
+        data,
       });
     }
 
     if (action === 'check-out') {
       if (!asistenciaExistente?.hora_entrada) {
         return NextResponse.json(
-          { ok: false, error: `No se puede registrar salida: ${empleado.nombre} ${empleado.apellido} aún no ha registrado entrada hoy.` },
+          { ok: false, error: `No se puede registrar salida: ${nombreCompleto} aún no ha registrado entrada hoy.` },
           { status: 400 }
         );
       }
       if (asistenciaExistente.hora_salida) {
         return NextResponse.json(
-          { ok: false, error: `${empleado.nombre} ${empleado.apellido} ya registró su salida hoy a las ${asistenciaExistente.hora_salida.slice(0, 5)}.` },
+          { ok: false, error: `${nombreCompleto} ya registró su salida hoy a las ${asistenciaExistente.hora_salida.slice(0, 5)}.` },
           { status: 400 }
         );
       }
 
       const { horasDecimal } = calcularHorasTrabajadas(asistenciaExistente.hora_entrada, horaActual);
-      const payloadOut: Record<string, any> = {
+      const data = await guardarRegistroAsistencia(asistenciaExistente.id, {
         hora_salida: horaActual,
         horas_trabajadas: horasDecimal,
-      };
-      if (metodo) payloadOut.metodo = metodo;
-      if (punto_acceso) payloadOut.punto_acceso = punto_acceso;
-      if (confianza_ia !== undefined && confianza_ia !== null) payloadOut.confianza_ia = Number(confianza_ia);
-      if (id_camara) payloadOut.id_camara = id_camara;
-
-      const res = await querySupabase(`asistencias?id=eq.${asistenciaExistente.id}`, {
-        method: 'PATCH',
-        headers: { Prefer: 'return=representation' },
-        body: JSON.stringify(payloadOut),
+        ...(metodo ? { metodo } : {}),
+        ...(punto_acceso ? { punto_acceso } : {}),
+        ...(confianza_ia !== undefined && confianza_ia !== null ? { confianza_ia: Number(confianza_ia) } : {}),
+        ...(id_camara ? { id_camara } : {}),
       });
 
       return NextResponse.json({
         ok: true,
-        mensaje: `Salida de ${empleado.nombre} ${empleado.apellido} registrada hoy a las ${horaActual.slice(0, 5)}.`,
-        data: Array.isArray(res) ? res[0] : res,
+        mensaje: `Salida de ${nombreCompleto} registrada hoy a las ${horaActual.slice(0, 5)}.`,
+        data,
       });
     }
 

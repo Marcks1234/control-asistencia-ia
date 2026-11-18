@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { id: "personal", label: "Gestión de Personal", href: "/agregado-prueba", habilitado: true },
   { id: "entradas-salidas", label: "Entradas / Salidas", href: "/entradas-salidas", habilitado: true },
   { id: "asistente-ia", label: "Asistente", href: "/asistente-ia", habilitado: true },
-  { id: "camaras-ia", label: "Cámaras IA", href: "/camaras", habilitado: true },
+  { id: "camaras-ia", label: "Cámaras", href: "/camaras", habilitado: true },
   { id: "reportes", label: "Reportes", href: "/reportes", habilitado: true },
 ];
 
