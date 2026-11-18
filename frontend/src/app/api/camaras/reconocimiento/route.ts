@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { querySupabase, resolverIdEmpresa, esUuidValido } from '@/lib/supabase';
 import { obtenerFechaHoyPeru, obtenerHoraActualPeru, evaluarReglaEntrada, calcularHorasTrabajadas } from '@/lib/utils';
 
+function segundosDesdeMedianoche(hora: string): number {
+  const partes = hora.split(':').map((n) => parseInt(n, 10) || 0);
+  return (partes[0] || 0) * 3600 + (partes[1] || 0) * 60 + (partes[2] || 0);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const {
       employeeId,
       id_camara,
-      punto_acceso = 'Torniquete A (Cámara 01)',
-      confianza_ia = 98.8,
+      punto_acceso = 'Cámara Biométrica IA',
+      confianza_ia = 96.5,
       accion = 'auto',
       time,
     } = await req.json();
@@ -20,10 +25,11 @@ export async function POST(req: NextRequest) {
     const idEmpresa = resolverIdEmpresa(req);
     const fechaHoy = obtenerFechaHoyPeru();
     const horaActual = time || obtenerHoraActualPeru();
+    const camaraUuid = esUuidValido(id_camara) ? id_camara : null;
 
     // 1. Obtener datos del empleado y su horario
     const empData = await querySupabase<any[]>(
-      `empleados?id=eq.${employeeId}&select=id,id_empresa,nombre,apellido,cargo,codigo_biometrico,departamentos(nombre),horarios(hora_entrada,hora_salida,tolerancia_minutos)&limit=1`
+      `empleados?id=eq.${employeeId}&select=id,id_empresa,nombre,apellido,cargo,codigo_biometrico,foto_url,departamentos(nombre),horarios(hora_entrada,hora_salida,tolerancia_minutos)&limit=1`
     );
     const empleado = Array.isArray(empData) && empData[0] ? empData[0] : null;
     if (!empleado) {
@@ -45,10 +51,21 @@ export async function POST(req: NextRequest) {
     } else if (accion === 'check-in') {
       operacion = 'check-in';
     } else {
-      // Modo 'auto': si no tiene entrada o tiene entrada vacía, marcar entrada; si ya tiene entrada pero no salida, marcar salida.
+      // Modo 'auto': si no tiene entrada hoy -> marcar entrada; si ya tiene entrada pero no salida -> verificar margen de 30s
       if (!asistenciaExistente?.hora_entrada) {
         operacion = 'check-in';
       } else if (!asistenciaExistente?.hora_salida) {
+        const segEntrada = segundosDesdeMedianoche(asistenciaExistente.hora_entrada);
+        const segActual = segundosDesdeMedianoche(horaActual);
+        if (Math.abs(segActual - segEntrada) < 30) {
+          return NextResponse.json({
+            ok: true,
+            yaRegistrado: true,
+            mensaje: `Entrada de ${nombreCompleto} registrada hace unos segundos (${asistenciaExistente.hora_entrada.slice(0, 5)}). Para marcar salida inmediata, cambia la cámara a modo "Salida".`,
+            asistencia: asistenciaExistente,
+            empleado,
+          });
+        }
         operacion = 'check-out';
       } else {
         return NextResponse.json({
@@ -63,10 +80,13 @@ export async function POST(req: NextRequest) {
 
     if (operacion === 'check-in') {
       if (asistenciaExistente?.hora_entrada) {
-        return NextResponse.json(
-          { ok: false, error: `${nombreCompleto} ya registró su entrada hoy a las ${asistenciaExistente.hora_entrada.slice(0, 5)}.` },
-          { status: 400 }
-        );
+        return NextResponse.json({
+          ok: true,
+          yaRegistrado: true,
+          mensaje: `${nombreCompleto} ya tiene entrada registrada hoy a las ${asistenciaExistente.hora_entrada.slice(0, 5)}. Cambia la cámara a modo "Salida" para marcar su salida.`,
+          asistencia: asistenciaExistente,
+          empleado,
+        });
       }
 
       const horario = Array.isArray(empleado.horarios) ? empleado.horarios[0] : empleado.horarios;
@@ -80,9 +100,9 @@ export async function POST(req: NextRequest) {
         minutos_tardanza: evaluacion.minutosTardanza,
         metodo: 'BIOMETRIA_FACIAL',
         punto_acceso: punto_acceso,
-        confianza_ia: Number(confianza_ia) || 98.8,
-        id_camara: id_camara || null,
-        observacion: evaluacion.observacion || 'Marcación biométrica facial por cámara IA',
+        confianza_ia: Number(confianza_ia) || 96.5,
+        id_camara: camaraUuid,
+        observacion: evaluacion.observacion || 'Marcación biométrica facial por cámara IA (face-api.js)',
       };
 
       const res = asistenciaExistente
@@ -101,7 +121,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         tipo: evaluacion.estado === 'TARDANZA' ? 'Tardanza' : 'Entrada',
-        mensaje: `Entrada biométrica de ${nombreCompleto} registrada a las ${horaActual.slice(0, 5)} (${confianza_ia}% de confianza).`,
+        mensaje: `Entrada biométrica de ${nombreCompleto} registrada a las ${horaActual.slice(0, 5)} (${confianza_ia}% similitud facial).`,
         asistencia: grabada,
         empleado,
       });
@@ -115,10 +135,13 @@ export async function POST(req: NextRequest) {
         );
       }
       if (asistenciaExistente.hora_salida) {
-        return NextResponse.json(
-          { ok: false, error: `${nombreCompleto} ya registró su salida hoy a las ${asistenciaExistente.hora_salida.slice(0, 5)}.` },
-          { status: 400 }
-        );
+        return NextResponse.json({
+          ok: true,
+          yaRegistrado: true,
+          mensaje: `${nombreCompleto} ya registró su salida hoy a las ${asistenciaExistente.hora_salida.slice(0, 5)}.`,
+          asistencia: asistenciaExistente,
+          empleado,
+        });
       }
 
       const { horasDecimal } = calcularHorasTrabajadas(asistenciaExistente.hora_entrada, horaActual);
@@ -127,8 +150,8 @@ export async function POST(req: NextRequest) {
         horas_trabajadas: horasDecimal,
         metodo: 'BIOMETRIA_FACIAL',
         punto_acceso: punto_acceso,
-        confianza_ia: Number(confianza_ia) || 98.8,
-        id_camara: id_camara || null,
+        confianza_ia: Number(confianza_ia) || 96.5,
+        id_camara: camaraUuid,
       };
 
       const res = await querySupabase(`asistencias?id=eq.${asistenciaExistente.id}`, {
@@ -141,7 +164,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         tipo: 'Salida',
-        mensaje: `Salida biométrica de ${nombreCompleto} registrada a las ${horaActual.slice(0, 5)} (${confianza_ia}% de confianza).`,
+        mensaje: `Salida biométrica de ${nombreCompleto} registrada a las ${horaActual.slice(0, 5)} (${confianza_ia}% similitud facial).`,
         asistencia: grabada,
         empleado,
       });

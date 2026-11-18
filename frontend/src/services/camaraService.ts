@@ -30,7 +30,7 @@ export async function fetchCamarasData(): Promise<CamarasResponse> {
         estado: 'OPERATIVO',
         precisionGlobal: 98.5,
         tiempoRespuestaMs: 140,
-        algoritmo: 'CNN Biométrico (Anti-spoofing activo)',
+        algoritmo: 'face-api.js CNN (68 Landmarks · Descriptor 128D)',
       },
       error: err?.message,
     };
@@ -42,10 +42,12 @@ export async function conectarNuevaCamara(payload: {
   punto_acceso: string;
   sede?: string;
   resolucion?: string;
+  stream_url?: string | null;
 }): Promise<{ ok: boolean; camara?: Camara; mensaje?: string; error?: string }> {
   try {
-    const { headers } = getClientAuth();
-    const res = await fetch('/api/camaras', {
+    const { headers, idEmpresa } = getClientAuth();
+    const url = idEmpresa ? `/api/camaras?id_empresa=${encodeURIComponent(idEmpresa)}` : '/api/camaras';
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(payload),
@@ -56,20 +58,34 @@ export async function conectarNuevaCamara(payload: {
   }
 }
 
-export async function cambiarEstadoCamara(
-  id: string,
-  estado: 'OPERATIVA' | 'PAUSADA' | 'DESCONECTADA'
-): Promise<{ ok: boolean; mensaje?: string; error?: string }> {
+export async function actualizarCamara(payload: {
+  id: string;
+  estado?: 'OPERATIVA' | 'PAUSADA' | 'DESCONECTADA';
+  stream_url?: string;
+}): Promise<{ ok: boolean; mensaje?: string; error?: string }> {
   try {
     const { headers } = getClientAuth();
     const res = await fetch('/api/camaras', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ id, estado }),
+      body: JSON.stringify(payload),
     });
     return await res.json();
   } catch (err: any) {
     return { ok: false, error: err?.message || 'Error de conexión' };
+  }
+}
+
+export async function eliminarCamara(id: string): Promise<{ ok: boolean; mensaje?: string; error?: string }> {
+  try {
+    const { headers } = getClientAuth();
+    const res = await fetch(`/api/camaras?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers,
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Error al eliminar cámara' };
   }
 }
 
@@ -89,8 +105,11 @@ export async function registrarMarcacionBiometrica(payload: {
   error?: string;
 }> {
   try {
-    const { headers } = getClientAuth();
-    const res = await fetch('/api/camaras/reconocimiento', {
+    const { headers, idEmpresa } = getClientAuth();
+    const url = idEmpresa
+      ? `/api/camaras/reconocimiento?id_empresa=${encodeURIComponent(idEmpresa)}`
+      : '/api/camaras/reconocimiento';
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(payload),

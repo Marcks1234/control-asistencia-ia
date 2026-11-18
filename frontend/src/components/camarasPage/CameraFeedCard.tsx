@@ -1,29 +1,68 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Camara } from "@/models/Camara";
+import { Camara, ModoAccesoCamara, parseCamaraStreamMeta } from "@/models/Camara";
+import {
+  EmpleadoConDescriptor,
+  loadFaceModels,
+  matchFaceInFrame,
+} from "@/lib/faceRecognition";
 
 interface CameraFeedCardProps {
   camara: Camara;
-  isWebcamActive: boolean;
-  onToggleWebcam: () => void;
+  empleados: EmpleadoConDescriptor[];
+  isStreamActive: boolean;
+  onToggleStream: () => void;
   onCapturarMarcacion: (camara: Camara) => void;
+  onAutoRecognition: (
+    empleado: EmpleadoConDescriptor,
+    camara: Camara,
+    confianza: number,
+    modo: ModoAccesoCamara
+  ) => void;
+  onCambiarModo: (camara: Camara, nuevoModo: ModoAccesoCamara) => void;
+  onEliminarCamara?: (camara: Camara) => void;
   isPaused: boolean;
 }
 
 export default function CameraFeedCard({
   camara,
-  isWebcamActive,
-  onToggleWebcam,
+  empleados,
+  isStreamActive,
+  onToggleStream,
   onCapturarMarcacion,
+  onAutoRecognition,
+  onCambiarModo,
+  onEliminarCamara,
   isPaused,
 }: CameraFeedCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [webcamError, setWebcamError] = useState<string | null>(null);
-  const [timeString, setTimeString] = useState<string>("");
+  const imgRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Reloj de tiempo real estilo CCTV (HH:MM:SS)
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [timeString, setTimeString] = useState<string>("");
+  const [faceStatus, setFaceStatus] = useState<string>("Esperando activación");
+  const [lastMatchBadge, setLastMatchBadge] = useState<string | null>(null);
+
+  // Referencias estables para el bucle de detección sin reiniciar cámara
+  const empleadosRef = useRef(empleados);
+  empleadosRef.current = empleados;
+  const camaraRef = useRef(camara);
+  camaraRef.current = camara;
+  const onAutoRef = useRef(onAutoRecognition);
+  onAutoRef.current = onAutoRecognition;
+
+  const consecutiveRef = useRef<{ empId: string; count: number }>({ empId: "", count: 0 });
+  const cooldownMapRef = useRef<Map<string, number>>(new Map());
+
+  const meta = parseCamaraStreamMeta(camara.stream_url);
+  const tipoFuente = camara.tipo_fuente || meta.tipo_fuente;
+  const urlIpLimpia = meta.urlLimpia;
+  const modoActual: ModoAccesoCamara = camara.modo_acceso || meta.modo_acceso || "AUTO";
+  const deviceIdObjetivo = camara.device_id || meta.device_id;
+
+  // Reloj en vivo estilo CCTV
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -36,193 +75,384 @@ export default function CameraFeedCard({
     return () => clearInterval(interval);
   }, []);
 
-  // Manejo de la cámara web real (getUserMedia)
+  // Gestión de cámara física local (getUserMedia)
   useEffect(() => {
     let activeStream: MediaStream | null = null;
+    let cancelled = false;
 
-    if (isWebcamActive) {
+    if (isStreamActive && !isPaused && tipoFuente === "WEBCAM_LOCAL") {
+      setStreamError(null);
+      setFaceStatus("Iniciando cámara y modelos IA...");
+
+      const videoConstraints: MediaTrackConstraints = deviceIdObjetivo
+        ? { deviceId: { exact: deviceIdObjetivo }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } };
+
       navigator.mediaDevices
-        ?.getUserMedia({
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: "user",
-          },
-          audio: false,
-        })
+        ?.getUserMedia({ video: videoConstraints, audio: false })
         .then((mediaStream) => {
+          if (cancelled) {
+            mediaStream.getTracks().forEach((t) => t.stop());
+            return;
+          }
           activeStream = mediaStream;
-          setStream(mediaStream);
-          setWebcamError(null);
           if (videoRef.current) {
             videoRef.current.srcObject = mediaStream;
           }
         })
         .catch((err) => {
-          console.warn("[CameraFeed] No se pudo acceder a la webcam:", err);
-          setWebcamError(
+          if (cancelled) return;
+          console.warn("[CameraFeedCard] Error webcam:", err);
+          setStreamError(
             err.name === "NotAllowedError"
               ? "Permiso de cámara denegado en el navegador."
-              : "No se detectó cámara web física disponible."
+              : "No se pudo abrir este dispositivo de video. Verifica si otra pestaña lo está usando."
           );
         });
-    } else {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        setStream(null);
-      }
+    } else if (videoRef.current?.srcObject) {
+      const prev = videoRef.current.srcObject as MediaStream;
+      prev.getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
     }
 
     return () => {
+      cancelled = true;
       if (activeStream) {
-        activeStream.getTracks().forEach((track) => track.stop());
+        activeStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [isWebcamActive]);
+  }, [isStreamActive, isPaused, tipoFuente, deviceIdObjetivo]);
+
+  // Bucle de reconocimiento facial en tiempo real con face-api.js
+  useEffect(() => {
+    if (!isStreamActive || isPaused || tipoFuente === "IP_RTSP") {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+
+    let running = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const runDetectionLoop = async () => {
+      if (!running) return;
+
+      await loadFaceModels();
+      if (!running) return;
+
+      const sourceEl =
+        tipoFuente === "WEBCAM_LOCAL" ? videoRef.current : imgRef.current;
+      const canvas = canvasRef.current;
+
+      const isReady =
+        sourceEl &&
+        (sourceEl instanceof HTMLVideoElement
+          ? sourceEl.readyState >= 2 && sourceEl.videoWidth > 0
+          : sourceEl.complete && sourceEl.naturalWidth > 0);
+
+      if (sourceEl && canvas && isReady) {
+        const srcW =
+          sourceEl instanceof HTMLVideoElement
+            ? sourceEl.videoWidth
+            : sourceEl.naturalWidth;
+        const srcH =
+          sourceEl instanceof HTMLVideoElement
+            ? sourceEl.videoHeight
+            : sourceEl.naturalHeight;
+
+        if (canvas.width !== srcW || canvas.height !== srcH) {
+          canvas.width = srcW;
+          canvas.height = srcH;
+        }
+
+        const results = await matchFaceInFrame(sourceEl, empleadosRef.current, 0.55);
+        if (!running) return;
+
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (results.length === 0) {
+            setFaceStatus("Buscando rostro...");
+            consecutiveRef.current = { empId: "", count: 0 };
+          } else {
+            for (const det of results) {
+              const matched = det.empleadoMatch;
+              const color = matched ? "#10B981" : "#F59E0B";
+
+              // Dibujar recuadro biométrico
+              ctx.strokeStyle = color;
+              ctx.lineWidth = Math.max(2, Math.round(srcW / 320));
+              ctx.strokeRect(det.box.x, det.box.y, det.box.width, det.box.height);
+
+              // Dibujar 68 landmarks faciales
+              ctx.fillStyle = color;
+              for (const pt of det.landmarks) {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 1.8, 0, Math.PI * 2);
+                ctx.fill();
+              }
+
+              // Etiqueta superior
+              const label = matched
+                ? `${matched.nombre} ${matched.apellido} · ${det.confianzaPorcentaje}%`
+                : `Rostro no registrado · ${det.confianzaPorcentaje}%`;
+
+              ctx.font = `bold ${Math.max(12, Math.round(srcW / 42))}px sans-serif`;
+              const textW = ctx.measureText(label).width;
+              const labelY = Math.max(22, det.box.y - 6);
+              ctx.fillStyle = matched ? "rgba(6, 95, 70, 0.9)" : "rgba(146, 64, 14, 0.9)";
+              ctx.fillRect(det.box.x, labelY - 18, textW + 14, 22);
+              ctx.fillStyle = "#FFFFFF";
+              ctx.fillText(label, det.box.x + 7, labelY - 3);
+            }
+
+            // Evaluar coincidencia principal para marcación automática
+            const primaryMatch = results.find((r) => r.empleadoMatch);
+            if (primaryMatch?.empleadoMatch) {
+              const emp = primaryMatch.empleadoMatch;
+              const modo = camaraRef.current.modo_acceso || modoActual;
+              setFaceStatus(`Reconocido: ${emp.nombre} (${primaryMatch.confianzaPorcentaje}%)`);
+
+              if (consecutiveRef.current.empId === emp.id) {
+                consecutiveRef.current.count += 1;
+              } else {
+                consecutiveRef.current = { empId: emp.id, count: 1 };
+              }
+
+              if (consecutiveRef.current.count >= 2) {
+                const cooldownKey = `${emp.id}-${modo}`;
+                const lastMarked = cooldownMapRef.current.get(cooldownKey) || 0;
+                const nowMs = Date.now();
+
+                if (nowMs - lastMarked >= 15000) {
+                  cooldownMapRef.current.set(cooldownKey, nowMs);
+                  setLastMatchBadge(`${emp.nombre} ${emp.apellido} (${primaryMatch.confianzaPorcentaje}%)`);
+                  setTimeout(() => setLastMatchBadge(null), 5000);
+                  onAutoRef.current(
+                    emp,
+                    camaraRef.current,
+                    primaryMatch.confianzaPorcentaje,
+                    modo
+                  );
+                }
+              }
+            } else {
+              consecutiveRef.current = { empId: "", count: 0 };
+              setFaceStatus("Rostro detectado sin enrolar");
+            }
+          }
+        }
+      }
+
+      if (running) {
+        timerId = setTimeout(runDetectionLoop, 280);
+      }
+    };
+
+    runDetectionLoop();
+
+    return () => {
+      running = false;
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [isStreamActive, isPaused, tipoFuente, modoActual]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg flex flex-col group transition-all">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg flex flex-col transition-all">
       {/* HEADER DE LA CÁMARA */}
-      <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
+      <div className="px-4 py-2.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 min-w-0">
           <span
-            className={`w-2.5 h-2.5 rounded-full ${
+            className={`w-2.5 h-2.5 rounded-full shrink-0 ${
               isPaused
                 ? "bg-amber-500"
-                : camara.estado === "OPERATIVA"
+                : isStreamActive
                 ? "bg-emerald-500 animate-pulse"
-                : "bg-red-500"
+                : "bg-slate-500"
             }`}
           />
-          <h3 className="font-bold text-white tracking-wide">{camara.nombre}</h3>
+          <h3 className="font-bold text-white tracking-wide truncate">{camara.nombre}</h3>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono shrink-0">
+            {tipoFuente === "WEBCAM_LOCAL" ? "USB/LOCAL" : tipoFuente === "IP_HTTP" ? "IP HTTP" : "RTSP"}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-[10px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700">
             {timeString}
           </span>
-          <span className="text-[10px] font-bold text-slate-300 uppercase bg-slate-800 px-2 py-0.5 rounded">
-            {camara.resolucion || "1080p 30fps"}
-          </span>
+          {onEliminarCamara && !camara.es_detectada_local && (
+            <button
+              type="button"
+              onClick={() => onEliminarCamara(camara)}
+              title="Desvincular cámara"
+              className="text-[11px] text-slate-400 hover:text-red-400 px-1.5 py-0.5 rounded hover:bg-slate-800 cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ÁREA DE VISUALIZACIÓN / STREAM */}
+      {/* ÁREA DE VIDEO + CANVAS FACE-API.JS */}
       <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden select-none">
-        {/* LÍNEAS DE ESCANEO CCTV */}
-        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] z-10 opacity-30" />
-
-        {isWebcamActive ? (
-          webcamError ? (
-            <div className="p-6 text-center text-red-400 text-xs max-w-sm space-y-2">
-              <span className="text-2xl">⚠️</span>
-              <p className="font-semibold">{webcamError}</p>
-              <button
-                type="button"
-                onClick={onToggleWebcam}
-                className="mt-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-[11px]"
-              >
-                Volver a Modo Simulación
-              </button>
-            </div>
-          ) : (
+        {isStreamActive && !isPaused ? (
+          tipoFuente === "WEBCAM_LOCAL" ? (
+            streamError ? (
+              <div className="p-6 text-center text-red-400 text-xs max-w-sm space-y-2">
+                <span className="text-2xl">⚠️</span>
+                <p className="font-semibold">{streamError}</p>
+                <button
+                  type="button"
+                  onClick={onToggleStream}
+                  className="mt-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-[11px] cursor-pointer"
+                >
+                  Reintentar / Apagar
+                </button>
+              </div>
+            ) : (
+              <div className="relative w-full h-full">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none z-20"
+                />
+              </div>
+            )
+          ) : tipoFuente === "IP_HTTP" ? (
             <div className="relative w-full h-full">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
+              <img
+                ref={imgRef}
+                src={urlIpLimpia}
+                crossOrigin="anonymous"
+                alt={camara.nombre}
+                onError={() =>
+                  setStreamError("No se puede cargar el stream HTTP MJPEG (verifica IP/CORS o red local).")
+                }
                 className="w-full h-full object-cover"
               />
-
-              {/* RETÍCULA BIOMÉTRICA DE RECONOCIMIENTO */}
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
-                <div className="relative w-48 h-56 border-2 border-dashed border-emerald-400/80 rounded-2xl flex flex-col justify-between p-2 shadow-[0_0_25px_rgba(52,211,153,0.3)]">
-                  {/* Esquinas guía */}
-                  <span className="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-emerald-400" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-emerald-400" />
-                  <span className="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-emerald-400" />
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-emerald-400" />
-
-                  {/* Línea láser de escaneo animada */}
-                  <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent animate-bounce opacity-80" />
-
-                  <div className="bg-slate-950/80 backdrop-blur-xs text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded text-center border border-emerald-500/30">
-                    SCANNER IA: 98.9%
-                  </div>
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-20"
+              />
+              {streamError && (
+                <div className="absolute inset-0 bg-black/85 flex flex-col items-center justify-center p-4 text-center text-amber-300 text-xs z-30">
+                  <p className="font-bold">⚠️ Stream IP no accesible desde este navegador</p>
+                  <p className="text-[11px] text-slate-400 mt-1 max-w-xs">{streamError}</p>
                 </div>
+              )}
+            </div>
+          ) : (
+            /* CÁMARA IP RTSP (HIKVISION / DAHUA) */
+            <div className="p-5 text-center text-slate-300 text-xs space-y-2 max-w-sm">
+              <div className="w-10 h-10 mx-auto rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
+                IP
               </div>
+              <p className="font-bold text-white">Flujo RTSP Corporativo Configurado</p>
+              <p className="text-[10px] font-mono text-slate-400 break-all bg-slate-950 px-2 py-1 rounded border border-slate-800">
+                {urlIpLimpia}
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Los navegadores no reproducen RTSP directo. Para ver video en vivo desde una cámara Hikvision, usa su endpoint HTTP MJPEG o un gateway WebRTC/MediaMTX en la red local.
+              </p>
             </div>
           )
         ) : (
-          /* MODO VISTA CCTV SIMULADA REALISTA */
-          <div className="relative w-full h-full bg-radial from-slate-900 via-slate-950 to-black flex items-center justify-center">
-            {/* Silueta de reconocimiento / Punto de acceso */}
-            <div className="relative flex flex-col items-center justify-center text-slate-600">
-              <div className="w-32 h-40 border border-slate-700/60 rounded-xl flex items-center justify-center relative p-3">
-                <svg className="w-16 h-16 text-slate-700 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-
-                {/* Retícula de detección */}
-                <span className="absolute top-1 left-1 w-3 h-3 border-t border-l border-blue-400" />
-                <span className="absolute top-1 right-1 w-3 h-3 border-t border-r border-blue-400" />
-                <span className="absolute bottom-1 left-1 w-3 h-3 border-b border-l border-blue-400" />
-                <span className="absolute bottom-1 right-1 w-3 h-3 border-b border-r border-blue-400" />
-              </div>
-              <span className="text-[10px] font-mono text-slate-400 mt-2 uppercase tracking-widest">
-                Detección Facial Lista
-              </span>
+          /* CÁMARA EN ESPERA / APAGADA */
+          <div className="relative w-full h-full bg-radial from-slate-900 via-slate-950 to-black flex flex-col items-center justify-center p-4 text-center">
+            <div className="w-24 h-28 border border-slate-700/60 rounded-xl flex items-center justify-center relative">
+              <svg className="w-12 h-12 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span className="absolute top-1 left-1 w-2.5 h-2.5 border-t border-l border-blue-400" />
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 border-t border-r border-blue-400" />
+              <span className="absolute bottom-1 left-1 w-2.5 h-2.5 border-b border-l border-blue-400" />
+              <span className="absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r border-blue-400" />
             </div>
-
-            {/* Badges en esquinas del video */}
-            <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] text-emerald-400 font-mono border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              LIVE FEED
-            </div>
-
-            <div className="absolute top-2.5 right-2.5 z-20 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] text-slate-300 font-mono border border-slate-800">
-              {camara.punto_acceso}
-            </div>
+            <span className="text-[11px] font-semibold text-slate-400 mt-2">
+              {isPaused ? "Transmisión Pausada" : "Cámara en espera"}
+            </span>
+            <button
+              type="button"
+              onClick={onToggleStream}
+              className="mt-2.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow cursor-pointer"
+            >
+              ▶ Encender Reconocimiento IA
+            </button>
           </div>
         )}
 
-        {/* OVERLAY DE ESTADO PAUSADO */}
-        {isPaused && (
-          <div className="absolute inset-0 z-30 bg-black/75 flex items-center justify-center text-white text-xs font-bold gap-2">
-            <span>⏸️</span> Transmisión Pausada
+        {/* BADGES SUPERIORES SOBRE STREAM */}
+        <div className="absolute top-2.5 left-2.5 z-30 flex items-center gap-1.5 bg-black/70 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-mono border border-slate-700/60">
+          <span className={`w-1.5 h-1.5 rounded-full ${isStreamActive && !isPaused ? "bg-emerald-400 animate-pulse" : "bg-slate-400"}`} />
+          <span className="text-slate-200">{isStreamActive && !isPaused ? faceStatus : "STANDBY"}</span>
+        </div>
+
+        <div className="absolute top-2.5 right-2.5 z-30 bg-black/70 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] text-slate-300 font-mono border border-slate-800">
+          {camara.punto_acceso}
+        </div>
+
+        {/* TOAST DE RECONOCIMIENTO AUTOMÁTICO */}
+        {lastMatchBadge && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 bg-emerald-600/95 text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-lg whitespace-nowrap animate-pulse">
+            ✓ Marcado: {lastMatchBadge}
           </div>
         )}
       </div>
 
-      {/* FOOTER Y CONTROLES DE LA CÁMARA */}
-      <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-slate-400">
-            {camara.sede || "Sede Central"}
-          </span>
+      {/* FOOTER: SELECTOR DE MODO (ENTRADA / SALIDA / AUTO) + CONTROLES */}
+      <div className="p-3 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+          {(["ENTRADA", "SALIDA", "AUTO"] as ModoAccesoCamara[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onCambiarModo(camara, m)}
+              className={`px-2 py-1 rounded text-[10px] font-bold transition cursor-pointer ${
+                modoActual === m
+                  ? m === "ENTRADA"
+                    ? "bg-emerald-600 text-white"
+                    : m === "SALIDA"
+                    ? "bg-blue-600 text-white"
+                    : "bg-indigo-600 text-white"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              {m === "AUTO" ? "⚡ Auto" : m === "ENTRADA" ? "→ Entrada" : "← Salida"}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={onToggleWebcam}
-            title={isWebcamActive ? "Desactivar cámara web" : "Probar con cámara web real"}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              isWebcamActive
+            onClick={onToggleStream}
+            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+              isStreamActive
                 ? "bg-red-600 hover:bg-red-700 text-white"
                 : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
             }`}
           >
-            <span>{isWebcamActive ? "⏹️ Detener WebCam" : "📹 Usar WebCam"}</span>
+            {isStreamActive ? "⏹ Apagar" : "📹 Encender"}
           </button>
 
           <button
             type="button"
             onClick={() => onCapturarMarcacion(camara)}
-            className="px-3.5 py-1.5 rounded-lg bg-[#1D4ED8] hover:bg-blue-600 text-white font-bold text-xs transition-all shadow-sm cursor-pointer flex items-center gap-1.5 active:scale-95"
+            className="px-2.5 py-1.5 rounded-lg bg-[#1D4ED8] hover:bg-blue-600 text-white font-bold text-[11px] transition-all cursor-pointer"
+            title="Marcar asistencia manualmente en esta cámara"
           >
-            <span>⚡ Marcar con IA</span>
+            Manual / Simular
           </button>
         </div>
       </div>

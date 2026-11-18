@@ -31,18 +31,36 @@ export default function AgregadoPruebaPage() {
     handleEliminarDepartamento,
     handleCambioTurno,
     handleCambioDepartamento,
+    handleActualizarBiometria,
   } = useGestionPersonal();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const comprimirImagen = (file: File): Promise<string> =>
+    new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setEmpForm({ ...empForm, foto: reader.result as string });
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = 360;
+          const scale = img.width > maxW ? maxW / img.width : 1;
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
+    });
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const dataUrl = await comprimirImagen(file);
+      setEmpForm({ ...empForm, foto: dataUrl });
     }
   };
 
@@ -248,6 +266,7 @@ export default function AgregadoPruebaPage() {
                         <th className="py-2 px-2">Colaborador</th>
                         <th className="py-2 px-2">DNI</th>
                         <th className="py-2 px-2">Cód. Biométrico</th>
+                        <th className="py-2 px-2">Biometría IA</th>
                         <th className="py-2 px-2">Departamento</th>
                         <th className="py-2 px-2">Turno Asignado</th>
                         <th className="py-2 px-2 text-right">Acción</th>
@@ -256,6 +275,7 @@ export default function AgregadoPruebaPage() {
                     <tbody className="divide-y divide-slate-100">
                       {filtrados.map((emp) => {
                         const fotoSrc = emp.foto_url || emp.foto || undefined;
+                        const tieneRostroIA = Array.isArray(emp.descripcion_facial) && emp.descripcion_facial.length === 128;
                         return (
                           <tr key={emp.id} className="hover:bg-slate-50">
                             <td className="py-2.5 px-2 font-bold text-slate-800">
@@ -275,6 +295,32 @@ export default function AgregadoPruebaPage() {
                             </td>
                             <td className="py-2.5 px-2 text-slate-600">{emp.dni}</td>
                             <td className="py-2.5 px-2 font-mono font-semibold text-blue-600">{emp.codigo_biometrico}</td>
+                            <td className="py-2.5 px-2">
+                              <label className="cursor-pointer inline-flex items-center gap-1.5">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const dataUrl = await comprimirImagen(file);
+                                      await handleActualizarBiometria(emp.id, dataUrl);
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                />
+                                {tieneRostroIA ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold hover:bg-emerald-100">
+                                    ✓ Rostro IA Activo
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold hover:bg-amber-100">
+                                    + Subir Rostro
+                                  </span>
+                                )}
+                              </label>
+                            </td>
                             <td className="py-2.5 px-2">
                               <select
                                 value={emp.departamentos?.nombre ? departamentos.find(d => d.nombre === emp.departamentos?.nombre)?.id || emp.id_departamento || "" : emp.id_departamento || ""}

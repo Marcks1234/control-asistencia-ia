@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   try {
     const idEmpresa = resolverIdEmpresa(req);
     const [empleados, departamentos, horarios] = await Promise.all([
-      querySupabase<any[]>(`empleados?id_empresa=eq.${idEmpresa}&select=id,nombre,apellido,dni,cargo,codigo_biometrico,id_departamento,id_horario,departamentos(nombre),horarios(id,descripcion,hora_entrada,hora_salida)&activo=eq.true&order=created_at.asc`),
+      querySupabase<any[]>(`empleados?id_empresa=eq.${idEmpresa}&select=id,nombre,apellido,dni,cargo,codigo_biometrico,foto_url,descripcion_facial,id_departamento,id_horario,departamentos(nombre),horarios(id,descripcion,hora_entrada,hora_salida)&activo=eq.true&order=created_at.asc`),
       querySupabase<any[]>(`departamentos?id_empresa=eq.${idEmpresa}&select=id,nombre&activo=eq.true&order=nombre.asc`),
       querySupabase<any[]>(`horarios?id_empresa=eq.${idEmpresa}&select=id,descripcion,hora_entrada,hora_salida,dias,tolerancia_minutos&activo=eq.true&order=created_at.asc`),
     ]);
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { nombre, apellido, dni, cargo = 'Colaborador', id_departamento, id_horario, id_empresa: bodyEmpresaId } = (await req.json()) || {};
+    const { nombre, apellido, dni, cargo = 'Colaborador', id_departamento, id_horario, id_empresa: bodyEmpresaId, foto, foto_url, descripcion_facial } = (await req.json()) || {};
     if (!nombre?.trim() || !apellido?.trim() || !dni?.trim()) {
       return NextResponse.json({ ok: false, error: 'Nombre, apellido y DNI son obligatorios.' }, { status: 400 });
     }
@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
         dni: cleanDni,
         cargo: cargo.trim(),
         codigo_biometrico: codigoBiometrico,
+        foto_url: foto_url || foto || null,
+        descripcion_facial: Array.isArray(descripcion_facial) ? descripcion_facial : null,
         punto_acceso_habitual: 'Acceso Principal',
         activo: true,
       }),
@@ -89,12 +91,16 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { idEmpleado, id_horario, id_departamento } = (await req.json()) || {};
+    const { idEmpleado, id_horario, id_departamento, foto_url, descripcion_facial } = (await req.json()) || {};
     if (!idEmpleado || !esUuidValido(idEmpleado)) return NextResponse.json({ ok: false, error: 'ID inválido.' }, { status: 400 });
 
     const updates: Record<string, any> = {};
     if (id_horario !== undefined) updates.id_horario = id_horario || null;
     if (id_departamento !== undefined) updates.id_departamento = id_departamento || null;
+    if (foto_url !== undefined) updates.foto_url = foto_url || null;
+    if (descripcion_facial !== undefined) {
+      updates.descripcion_facial = Array.isArray(descripcion_facial) ? descripcion_facial : null;
+    }
 
     const res = await querySupabase(`empleados?id=eq.${idEmpleado}`, {
       method: 'PATCH',
@@ -102,7 +108,8 @@ export async function PATCH(req: NextRequest) {
       body: JSON.stringify(updates),
     });
 
-    return NextResponse.json({ ok: true, mensaje: 'Turno actualizado.', empleado: Array.isArray(res) ? res[0] : res });
+    if (!res) return NextResponse.json({ ok: false, error: 'Error al actualizar colaborador.' }, { status: 400 });
+    return NextResponse.json({ ok: true, mensaje: 'Colaborador actualizado.', empleado: Array.isArray(res) ? res[0] : res });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }

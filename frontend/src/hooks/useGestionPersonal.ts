@@ -5,6 +5,7 @@ import {
   fetchEmpleadosPrueba,
   crearEmpleadoPrueba,
   asignarTurnoEmpleado,
+  actualizarBiometriaEmpleado,
   eliminarEmpleadoPrueba,
   crearTurnoPrueba,
   eliminarTurnoPrueba,
@@ -14,6 +15,7 @@ import {
   DepartamentoOption,
   TurnoOption,
 } from "@/services/empleadoService";
+import { extractFaceDescriptor } from "@/lib/faceRecognition";
 
 export interface EmpleadoItemConFoto extends EmpleadoItem {
   foto?: string | null;
@@ -76,6 +78,14 @@ export function useGestionPersonal() {
       return setMensaje({ tipo: "err", texto: "Completa nombre, apellido y DNI." });
     }
     setGuardando(true);
+    let descriptorFacial: number[] | null = null;
+    if (empForm.foto) {
+      descriptorFacial = await extractFaceDescriptor(empForm.foto);
+      if (!descriptorFacial) {
+        setGuardando(false);
+        return setMensaje({ tipo: "err", texto: "No se detectó un rostro claro en la foto. Usa otra imagen frontal o regístralo sin foto y enrólalo luego en Cámaras IA." });
+      }
+    }
     const res = await crearEmpleadoPrueba({
       nombre: empForm.nombre.trim(),
       apellido: empForm.apellido.trim(),
@@ -83,8 +93,8 @@ export function useGestionPersonal() {
       cargo: empForm.cargo.trim() || "Colaborador",
       id_departamento: empForm.idDepto || undefined,
       id_horario: empForm.idTurno || undefined,
-      ...(empForm.foto ? { foto: empForm.foto } : {}),
-    } as any);
+      ...(empForm.foto ? { foto_url: empForm.foto, descripcion_facial: descriptorFacial } : {}),
+    });
     setGuardando(false);
     if (res.ok) {
       setMensaje({ tipo: "ok", texto: res.mensaje || "Empleado registrado." });
@@ -178,6 +188,24 @@ export function useGestionPersonal() {
     cargarDatos();
   };
 
+  const handleActualizarBiometria = async (idEmpleado: string, fotoDataUrl: string) => {
+    setGuardando(true);
+    setMensaje(null);
+    const descriptor = await extractFaceDescriptor(fotoDataUrl);
+    if (!descriptor) {
+      setGuardando(false);
+      return setMensaje({ tipo: "err", texto: "No se detectó un rostro frontal válido en la imagen." });
+    }
+    const res = await actualizarBiometriaEmpleado(idEmpleado, fotoDataUrl, descriptor);
+    setGuardando(false);
+    if (res.ok) {
+      setMensaje({ tipo: "ok", texto: "Biometría facial registrada correctamente." });
+      cargarDatos();
+    } else {
+      setMensaje({ tipo: "err", texto: res.error || "No se pudo guardar la biometría." });
+    }
+  };
+
   return {
     empleados,
     departamentos,
@@ -201,5 +229,6 @@ export function useGestionPersonal() {
     handleEliminarDepartamento,
     handleCambioTurno,
     handleCambioDepartamento,
+    handleActualizarBiometria,
   };
 }

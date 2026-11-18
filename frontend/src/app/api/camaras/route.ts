@@ -1,70 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { querySupabase, resolverIdEmpresa, esUuidValido } from '@/lib/supabase';
 import { obtenerFechaHoyPeru } from '@/lib/utils';
-import { Camara, DeteccionBiometrica } from '@/models/Camara';
-
-const CAMARAS_DEFAULT: Omit<Camara, 'id_empresa'>[] = [
-  {
-    id: 'cam-01-torniquete-a',
-    nombre: 'Cám 01 · Torniquete A',
-    punto_acceso: 'ENTRADA PRINCIPAL',
-    sede: 'Sede Central',
-    stream_url: null,
-    resolucion: '1080p 30fps',
-    estado: 'OPERATIVA',
-    activo: true,
-  },
-  {
-    id: 'cam-02-torniquete-b',
-    nombre: 'Cám 02 · Torniquete B',
-    punto_acceso: 'PASILLO TI',
-    sede: 'Sede Central',
-    stream_url: null,
-    resolucion: '1080p 30fps',
-    estado: 'OPERATIVA',
-    activo: true,
-  },
-  {
-    id: 'cam-03-recepcion',
-    nombre: 'Cám 03 · Recepción',
-    punto_acceso: 'LOBBY PRINCIPAL',
-    sede: 'Sede Central',
-    stream_url: null,
-    resolucion: '1080p 30fps',
-    estado: 'OPERATIVA',
-    activo: true,
-  },
-];
+import { Camara, DeteccionBiometrica, parseCamaraStreamMeta } from '@/models/Camara';
 
 export async function GET(req: NextRequest) {
   try {
     const idEmpresa = resolverIdEmpresa(req);
     const fechaHoy = obtenerFechaHoyPeru();
 
-    // 1. Obtener cámaras de la empresa
+    // 1. Obtener únicamente las cámaras reales registradas en la empresa
     let camaras: Camara[] = [];
     if (esUuidValido(idEmpresa)) {
       const camarasData = await querySupabase<any[]>(
         `camaras?id_empresa=eq.${idEmpresa}&activo=eq.true&order=created_at.asc`
       );
-      if (Array.isArray(camarasData) && camarasData.length > 0) {
-        camaras = camarasData;
+      if (Array.isArray(camarasData)) {
+        camaras = camarasData.map((c) => {
+          const meta = parseCamaraStreamMeta(c.stream_url);
+          return {
+            ...c,
+            tipo_fuente: meta.tipo_fuente,
+            device_id: meta.device_id,
+            modo_acceso: meta.modo_acceso,
+          };
+        });
       }
     }
 
-    // Si la empresa aún no tiene cámaras creadas en BD, proveer las cámaras iniciales
-    if (camaras.length === 0) {
-      camaras = CAMARAS_DEFAULT.map((c) => ({
-        ...c,
-        id_empresa: idEmpresa,
-      }));
-    }
-
-    // 2. Obtener asistencias recientes del día con biometría
+    // 2. Obtener últimas marcaciones del día
     let detecciones: DeteccionBiometrica[] = [];
     if (esUuidValido(idEmpresa)) {
       const asistData = await querySupabase<any[]>(
-        `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id,id_empleado,hora_entrada,hora_salida,minutos_tardanza,estado,metodo,punto_acceso,confianza_ia,observacion,created_at,empleados(id,nombre,apellido,cargo,departamentos(nombre))&order=created_at.desc&limit=10`
+        `asistencias?id_empresa=eq.${idEmpresa}&fecha=eq.${fechaHoy}&select=id,id_empleado,hora_entrada,hora_salida,minutos_tardanza,estado,metodo,punto_acceso,confianza_ia,observacion,created_at,empleados(id,nombre,apellido,cargo,foto_url,departamentos(nombre))&order=created_at.desc&limit=15`
       );
 
       if (Array.isArray(asistData)) {
@@ -82,9 +49,10 @@ export async function GET(req: NextRequest) {
               nombre: emp ? `${emp.nombre} ${emp.apellido}`.trim() : 'Colaborador',
               cargo: emp?.cargo || 'Colaborador',
               departamento: emp?.departamentos?.nombre || 'General',
-              camaraNombre: a.punto_acceso?.includes('(') ? a.punto_acceso : 'Cám 01 · Torniquete A',
+              foto_url: emp?.foto_url || null,
+              camaraNombre: a.punto_acceso || 'Cámara Biométrica',
               puntoAcceso: a.punto_acceso || 'Acceso Principal',
-              confianza: a.confianza_ia ? Number(a.confianza_ia) : 98.7,
+              confianza: a.confianza_ia ? Number(a.confianza_ia) : 95.0,
               tipo: (esSalida ? 'Salida' : esTardanza ? 'Tardanza' : 'Entrada') as 'Entrada' | 'Salida' | 'Tardanza',
               hora: horaMarcacion,
               tiempoRelativo: 'Hoy',
@@ -102,7 +70,7 @@ export async function GET(req: NextRequest) {
         estado: 'OPERATIVO',
         precisionGlobal: 98.6,
         tiempoRespuestaMs: 135,
-        algoritmo: 'CNN Biométrico (Anti-spoofing activo)',
+        algoritmo: 'face-api.js CNN (68 Landmarks · Descriptor 128D)',
       },
     });
   } catch (error: any) {
@@ -117,7 +85,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Sesión o empresa no válida' }, { status: 401 });
     }
 
-    const { nombre, punto_acceso, sede = 'Sede Central', resolucion = '1080p 30fps' } = await req.json();
+    const {
+      nombre,
+      punto_acceso,
+      sede = 'Sede Central',
+      resolucion = '1080p 30fps',
+      stream_url = null,
+    } = await req.json();
+
     if (!nombre?.trim() || !punto_acceso?.trim()) {
       return NextResponse.json({ ok: false, error: 'Nombre y punto de acceso son obligatorios.' }, { status: 400 });
     }
@@ -130,17 +105,28 @@ export async function POST(req: NextRequest) {
         nombre: nombre.trim(),
         punto_acceso: punto_acceso.trim(),
         sede: sede.trim(),
+        stream_url: stream_url || null,
         resolucion: resolucion.trim(),
         estado: 'OPERATIVA',
         activo: true,
       }),
     });
 
-    const creada = Array.isArray(res) && res[0] ? res[0] : null;
+    const creadaRaw = Array.isArray(res) && res[0] ? res[0] : null;
+    if (!creadaRaw) {
+      return NextResponse.json({ ok: false, error: 'No se pudo guardar la cámara en Supabase.' }, { status: 400 });
+    }
+
+    const meta = parseCamaraStreamMeta(creadaRaw.stream_url);
     return NextResponse.json({
       ok: true,
       mensaje: 'Cámara conectada exitosamente.',
-      camara: creada,
+      camara: {
+        ...creadaRaw,
+        tipo_fuente: meta.tipo_fuente,
+        device_id: meta.device_id,
+        modo_acceso: meta.modo_acceso,
+      },
     });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
@@ -149,19 +135,37 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, estado } = await req.json();
-    if (!id || !estado) {
-      return NextResponse.json({ ok: false, error: 'ID y estado son requeridos.' }, { status: 400 });
+    const { id, estado, stream_url } = await req.json();
+    if (!id) {
+      return NextResponse.json({ ok: false, error: 'ID es requerido.' }, { status: 400 });
     }
 
-    if (esUuidValido(id)) {
+    const updates: Record<string, any> = {};
+    if (estado !== undefined) updates.estado = estado;
+    if (stream_url !== undefined) updates.stream_url = stream_url;
+
+    if (esUuidValido(id) && Object.keys(updates).length > 0) {
       await querySupabase(`camaras?id=eq.${id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ estado }),
+        body: JSON.stringify(updates),
       });
     }
 
-    return NextResponse.json({ ok: true, mensaje: `Cámara actualizada a estado ${estado}.` });
+    return NextResponse.json({ ok: true, mensaje: 'Cámara actualizada correctamente.' });
+  } catch (error: any) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const id = req.nextUrl.searchParams.get('id');
+    if (!id || !esUuidValido(id)) {
+      return NextResponse.json({ ok: false, error: 'ID de cámara inválido.' }, { status: 400 });
+    }
+
+    await querySupabase(`camaras?id=eq.${id}`, { method: 'DELETE' });
+    return NextResponse.json({ ok: true, mensaje: 'Cámara desconectada y eliminada.' });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }

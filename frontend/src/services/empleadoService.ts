@@ -16,6 +16,8 @@ export interface EmpleadoItem {
   dni: string;
   cargo: string;
   codigo_biometrico: string;
+  foto_url?: string | null;
+  descripcion_facial?: number[] | null;
   id_departamento?: string;
   id_horario?: string;
   departamentos?: { nombre: string } | null;
@@ -61,6 +63,16 @@ export const asignarTurnoEmpleado = (idEmpleado: string, id_horario?: string | n
   if (id_departamento !== undefined) body.id_departamento = id_departamento;
   return requestApi('/api/empleados', { method: 'PATCH', body: JSON.stringify(body) });
 };
+
+export const actualizarBiometriaEmpleado = (
+  idEmpleado: string,
+  foto_url: string | null,
+  descripcion_facial: number[] | null
+) =>
+  requestApi('/api/empleados', {
+    method: 'PATCH',
+    body: JSON.stringify({ idEmpleado, foto_url, descripcion_facial }),
+  });
 
 export const eliminarEmpleadoPrueba = (id: string) =>
   requestApi(`/api/empleados?id=${encodeURIComponent(id)}`, { method: 'DELETE' });

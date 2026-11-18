@@ -75,9 +75,17 @@ export default function RecentDetectionsWidget({
                   className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:border-slate-200 bg-slate-50/60 hover:bg-slate-50 transition-all text-xs"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-[#1D4ED8] text-white font-bold flex items-center justify-center shrink-0 shadow-xs text-xs">
-                      {iniciales}
-                    </div>
+                    {d.foto_url ? (
+                      <img
+                        src={d.foto_url}
+                        alt={d.nombre}
+                        className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 shadow-xs"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-[#1D4ED8] text-white font-bold flex items-center justify-center shrink-0 shadow-xs text-xs">
+                        {iniciales}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="font-bold text-slate-800 truncate">{d.nombre}</p>
                       <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
